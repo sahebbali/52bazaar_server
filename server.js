@@ -8,10 +8,11 @@ import { fileURLToPath } from "url";
 import { connA } from "./db-config/db-conn.js";
 
 import authRoute from "./routes/auth.js";
-import categoryRoute from "./routes/category.js";
+// import categoryRoute from "./routes/category.js";
 import productRoute from "./routes/product.js";
 import orderRoute from "./routes/order.js";
 import userRoute from "./routes/userRoutes.js";
+import adminRoute from "./routes/admin/index.js";
 
 const app = express();
 
@@ -29,7 +30,6 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -66,10 +66,11 @@ app.use(async (req, res, next) => {
 // Routes
 app.get("/api/warmup", (req, res) => res.send("Warmed up ☕"));
 app.use("/api", authRoute);
-app.use("/api", categoryRoute);
+// app.use("/api", categoryRoute);
 app.use("/api", productRoute);
 app.use("/api", orderRoute);
 app.use("/api", userRoute);
+app.use("/api/admin", adminRoute);
 
 app.all("*", (req, res) => {
   res.status(404).json({ message: "API route not found", path: req.path });
