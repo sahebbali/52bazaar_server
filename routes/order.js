@@ -3,7 +3,6 @@ import express from "express";
 const router = express.Router();
 import Order from "../models/orderModel.js";
 import orderController from "../controllers/orderController.js";
-import authMiddleware from "../middleware/authMiddleware.js";
 
 router.get("/orders", orderController.getOrders);
 router.get("/orders/:id", orderController.getOrderDetails);

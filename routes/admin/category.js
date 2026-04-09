@@ -4,22 +4,12 @@ import categoryController from "../../controllers/categoryController.js";
 import multer from "multer";
 const upload = multer();
 
-router.get("/categories", categoryController.getCategories);
-router.post("/category/store", upload.none(), categoryController.addCategory);
-router.put(
-  "/category/edit/:id",
-  upload.none(),
-  categoryController.updateCategory,
-);
-router.put(
-  "/category/edit/:id",
-  upload.none(),
-  categoryController.updateCategory,
-);
-router.post(
-  "/category/:id/deactivate",
-  upload.none(),
-  categoryController.deactivateCategory,
-);
+router.get("/get-all-categories", categoryController.getAllCategories);
+router.get("/get-category-tree", categoryController.getCategoryTree);
+router.get("/get-category/:id", categoryController.getCategoryById);
+router.post("/add-category", categoryController.createCategory);
+router.put("/update-category/:id", categoryController.updateCategory);
+router.delete("/delete-category/:id", categoryController.deleteCategory);
+router.patch("/toggle-status/:id", categoryController.toggleStatus);
 
 export default router;

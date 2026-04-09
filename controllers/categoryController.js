@@ -1,176 +1,338 @@
-import { Types } from "mongoose";
+import { Types, mongoose } from "mongoose";
 import Category from "../models/categoryModel.js";
 
-const getCategories = async (req, res) => {
-  try {
-    let { name, parent, page = 1, limit = 20 } = req.query;
-    const query = { is_active: true };
-
-    const isTextSearch = Boolean(name);
-
-    if (limit === "all" || limit === 0) {
-      limit = 0; // MongoDB: 0 means "no limit" (return all)
-      page = 1;
-    } else {
-      limit = Number(limit);
-      page = Number(page);
-    }
-
-    const skip = limit === 0 ? 0 : (page - 1) * limit;
-
-    // Filters
-    if (isTextSearch) {
-      query.$text = { $search: name };
-    }
-
-    if (name) query.name = { $regex: name, $options: "i" };
-
-    if (parent && Types.ObjectId.isValid(parent))
-      query.parent = new Types.ObjectId(parent);
-
-    const projection = {
-      name: 1,
-      parent: 1,
-      ...(isTextSearch && { score: { $meta: "textScore" } }),
-    };
-
-    const sort = isTextSearch ? { score: { $meta: "textScore" } } : { name: 1 };
-
-    const [totalCategories, categories] = await Promise.all([
-      Category.countDocuments(query),
-      Category.find(query)
-        .select(projection)
-        .sort(sort)
-        .populate("parent_id", "name")
-        .lean()
-        .skip(skip)
-        .limit(limit === 0 ? undefined : limit) // ✅ no limit if 0
-        .maxTimeMS(5000),
-    ]);
-
-    res.status(200).json({
-      totalCategories,
-      totalPages: limit === 0 ? 1 : Math.ceil(totalCategories / limit), // ✅ prevent division by zero
-      currentPage: Number(page),
-      categories,
-    });
-  } catch (err) {
-    // Log the actual error message and stack trace
-    console.error("Error fetching categories:", err.message);
-    console.error(err.stack);
-
-    // Send server error response
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+// Helper function to transform category for frontend
+const transformCategory = (category) => {
+  return {
+    id: category._id.toString(),
+    name: category.name,
+    slug: category.slug,
+    description: category.description || "",
+    parent: category.parent_id?.toString() || "",
+    status: category.is_active ? "active" : "inactive",
+    icon: category.icon || "🗂️",
+    metaTitle: category.meta_title || "",
+    metaDesc: category.meta_description || "",
+    createdAt: category.created_at
+      ? new Date(category.created_at).toLocaleDateString()
+      : new Date().toLocaleDateString(),
+    level: category.level,
+    path: category.path,
+    products: 0, // You can add product count query here if needed
+  };
 };
 
-const addCategory = async (req, res) => {
+// Get all categories
+const getAllCategories = async (req, res) => {
   try {
-    const { name, parent_id, is_active } = req.body;
-    // Check for existing product with same name and category
-    const existingCategory = await Category.findOne({
-      name: name.trim(),
-      parent_id,
-      is_active: true,
-    });
+    const { includeInactive = false } = req.query;
 
-    if (existingCategory) {
-      return res.status(400).json({
-        success: false,
-        message: "Category with the same name already exists",
-      });
-    }
+    const filter = includeInactive === "true" ? {} : { is_active: true };
 
-    const newCategory = new Category({
-      name,
-      parent_id: parent_id || null,
-      is_active: is_active ?? true,
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
+    const categories = await Category.find(filter)
+      .populate("parent", "name")
+      .sort({ level: 1, name: 1 })
+      .lean();
 
-    const saved = await newCategory.save();
+    const transformed = categories.map(transformCategory);
 
-    res
-      .status(201)
-      .json({ success: true, message: "Category added successfully" });
+    res.json(transformed);
   } catch (error) {
-    console.error("Add Category Error:", error);
-    res.status(500).json({ message: "Failed to create category" });
+    res.status(500).json({ error: error.message });
   }
 };
 
-const updateCategory = async (req, res) => {
+// Get category tree (hierarchical)
+const getCategoryTree = async (req, res) => {
   try {
-    const { name, parent_id } = req.body;
-    const categoryId = req.params.id;
+    const categories = await Category.find({ is_active: true }).lean();
 
-    // Check for duplicate product name in same category (exclude self)
-    const existingCategory = await Category.findOne({
-      _id: { $ne: categoryId },
-      name: name.trim(),
-      parent_id,
+    // Build tree structure
+    const categoryMap = {};
+    const roots = [];
+
+    categories.forEach((category) => {
+      categoryMap[category._id] = {
+        ...transformCategory(category),
+        children: [],
+      };
     });
 
-    if (existingCategory) {
-      return res.status(400).json({
-        success: false,
-        message: "Category with the same name already exists in this category",
-      });
-    }
-
-    // Find current product
-    const category = await Category.findById(categoryId);
-
-    if (!category) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Category not found" });
-    }
-
-    const updatedData = { name, parent_id };
-
-    // 3. Update product in DB
-    const updated = await Category.findByIdAndUpdate(categoryId, updatedData, {
-      new: true,
+    categories.forEach((category) => {
+      if (category.parent_id) {
+        const parentId = category.parent_id.toString();
+        if (categoryMap[parentId]) {
+          categoryMap[parentId].children.push(categoryMap[category._id]);
+        } else {
+          roots.push(categoryMap[category._id]);
+        }
+      } else {
+        roots.push(categoryMap[category._id]);
+      }
     });
 
-    res.status(200).json({ success: true, data: updated });
+    res.json(roots);
   } catch (error) {
-    console.error("Error updating product:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to update product" });
+    res.status(500).json({ error: error.message });
   }
 };
 
-const deactivateCategory = async (req, res) => {
+// Get single category by ID
+const getCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
-    const category = await Category.findById(id);
 
-    if (!category) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Category not found" });
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid category ID" });
     }
 
-    category.is_active = false; // assuming you have an `is_active` field
+    const category = await Category.findById(id)
+      .populate("parent", "name")
+      .lean();
+
+    if (!category) {
+      return res.status(404).json({ error: "Category not found" });
+    }
+
+    res.json(transformCategory(category));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Create new category
+const createCategory = async (req, res) => {
+  try {
+    const {
+      name,
+      slug,
+      description,
+      parent,
+      status,
+      icon,
+      metaTitle,
+      metaDesc,
+    } = req.body;
+
+    // console.log("Received category data:", req.body); // Debug log
+
+    // Check if category with same name exists
+    const existingCategory = await Category.findOne({ name });
+    if (existingCategory) {
+      return res
+        .status(400)
+        .json({ error: "Category with this name already exists" });
+    }
+
+    // Check if slug is unique
+    if (slug) {
+      const existingSlug = await Category.findOne({ slug });
+      if (existingSlug) {
+        return res.status(400).json({ error: "Slug already exists" });
+      }
+    }
+
+    // Validate parent category if provided
+    if (parent) {
+      if (!(Number.isInteger(parent) && parent > 0)) {
+        return res.status(400).json({ error: "Invalid parent category ID" });
+      }
+
+      const parentCategory = await Category.findById(parent);
+      if (!parentCategory) {
+        return res.status(400).json({ error: "Parent category not found" });
+      }
+    }
+
+    const category = await Category.create({
+      name,
+      slug: slug || undefined,
+      description: description || "",
+      parent_id: parent || null,
+      is_active: status === "active",
+      icon: icon || "🗂️",
+      meta_title: metaTitle || "",
+      meta_description: metaDesc || "",
+    });
+
+    res.status(201).json({
+      message: "Category created successfully",
+      data: transformCategory(category),
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res
+        .status(400)
+        .json({ error: "Duplicate key error. Name or slug already exists." });
+    }
+    console.error("Error creating category:", error); // Debug log
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Update category
+const updateCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      slug,
+      description,
+      parent,
+      status,
+      icon,
+      metaTitle,
+      metaDesc,
+    } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid category ID" });
+    }
+
+    const existingCategory = await Category.findById(id);
+    if (!existingCategory) {
+      return res.status(404).json({ error: "Category not found" });
+    }
+
+    // Check if updating to a parent that would create a circular reference
+    if (parent) {
+      if (!mongoose.Types.ObjectId.isValid(parent)) {
+        return res.status(400).json({ error: "Invalid parent category ID" });
+      }
+
+      if (parent === id) {
+        return res
+          .status(400)
+          .json({ error: "Category cannot be its own parent" });
+      }
+
+      // Check for circular reference
+      let currentParent = await Category.findById(parent);
+      while (currentParent && currentParent.parent_id) {
+        if (currentParent.parent_id.toString() === id) {
+          return res.status(400).json({ error: "Circular reference detected" });
+        }
+        currentParent = await Category.findById(currentParent.parent_id);
+      }
+    }
+
+    // Check name uniqueness
+    if (name && name !== existingCategory.name) {
+      const nameExists = await Category.findOne({ name, _id: { $ne: id } });
+      if (nameExists) {
+        return res.status(400).json({ error: "Category name already exists" });
+      }
+    }
+
+    // Check slug uniqueness
+    if (slug && slug !== existingCategory.slug) {
+      const slugExists = await Category.findOne({ slug, _id: { $ne: id } });
+      if (slugExists) {
+        return res.status(400).json({ error: "Slug already exists" });
+      }
+    }
+
+    const updated = await Category.findByIdAndUpdate(
+      id,
+      {
+        name: name || existingCategory.name,
+        slug: slug || existingCategory.slug,
+        description:
+          description !== undefined
+            ? description
+            : existingCategory.description,
+        parent_id:
+          parent !== undefined ? parent || null : existingCategory.parent_id,
+        is_active:
+          status !== undefined
+            ? status === "active"
+            : existingCategory.is_active,
+        icon: icon || existingCategory.icon,
+        meta_title:
+          metaTitle !== undefined ? metaTitle : existingCategory.meta_title,
+        meta_description:
+          metaDesc !== undefined ? metaDesc : existingCategory.meta_description,
+      },
+      { new: true, runValidators: true },
+    )
+      .populate("parent", "name")
+      .lean();
+
+    res.json(transformCategory(updated));
+  } catch (error) {
+    if (error.code === 11000) {
+      return res
+        .status(400)
+        .json({ error: "Duplicate key error. Name or slug already exists." });
+    }
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Delete category
+const deleteCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid category ID" });
+    }
+
+    // Check if category has children
+    const children = await Category.find({ parent_id: id });
+    if (children.length > 0) {
+      return res.status(400).json({
+        error:
+          "Cannot delete category with subcategories. Move or delete children first.",
+      });
+    }
+
+    const deleted = await Category.findByIdAndDelete(id);
+
+    if (!deleted) {
+      return res.status(404).json({ error: "Category not found" });
+    }
+
+    res.json({ message: "Category deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Toggle category status (active/inactive)
+const toggleStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid category ID" });
+    }
+
+    const category = await Category.findById(id);
+    if (!category) {
+      return res.status(404).json({ error: "Category not found" });
+    }
+
+    category.is_active = !category.is_active;
     await category.save();
 
-    return res.json({
-      success: true,
-      message: "Category removed successfully.",
+    res.json({
+      message: `Category ${
+        category.is_active ? "activated" : "deactivated"
+      } successfully`,
+      status: category.is_active ? "active" : "inactive",
     });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: "Server error" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 
 export default {
-  getCategories,
-  addCategory,
+  getAllCategories,
+  getCategoryTree,
+  getCategoryById,
+  createCategory,
   updateCategory,
-  deactivateCategory,
+  deleteCategory,
+  toggleStatus,
 };

@@ -1,31 +1,60 @@
 import jwt from "jsonwebtoken";
+import { verify_jwt } from "../utils/generateToken.js";
+import User from "../models/userModel.js";
 
-export const verifyJWT = async (req, res, next) => {
-  if (typeof req.headers["authorization"] === "undefined") {
-    return res.status(401).send({
-      error: {
-        message: "Not authorized, cannot find token",
-      },
-    });
-  } else {
-    let token = req.headers["authorization"];
-    let decoded = verify_jwt(token);
-    if (decoded.status) {
-      req.auth = decoded.data;
-      next();
-    } else {
-      return res.status(401).send({
-        error: {
-          message: "Unauthorized access",
-        },
+export const verifyJWT = (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    // 1. Check header exists
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "No token provided",
       });
     }
+
+    // 2. Format: "Bearer TOKEN"
+    const parts = authHeader.split(" ");
+
+    if (parts.length !== 2 || parts[0] !== "Bearer") {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token format",
+      });
+    }
+
+    const token = parts[1]; // ✅ Extract real token
+
+    // console.log("Received token:", token); // Debug log
+    // 3. Verify token
+    const decoded = verify_jwt(token);
+
+    // console.log("Decoded token:", decoded);
+
+    if (!decoded.status) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired token",
+      });
+    }
+
+    // 4. Attach user data
+    req.auth = decoded.data;
+
+    next();
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
-
 export const verifyAdmin = async (req, res, next) => {
   try {
-    const requester = req.auth.id;
+    const requester = req.auth.email;
+    // console.log("Requester ID from token:", requester); // Debug log
     const requesterAccount = await User.findOne({
       $or: [{ userId: requester }, { email: requester }],
     });
@@ -46,7 +75,7 @@ export const verifyAdmin = async (req, res, next) => {
     });
   }
 };
-const authMiddleware = async (req, res, next) => {
+export const authMiddleware = async (req, res, next) => {
   const token = req.headers["authorization"];
   if (!token) return res.status(401).json({ message: "Token missing" });
 
@@ -58,7 +87,3 @@ const authMiddleware = async (req, res, next) => {
     res.status(401).json({ message: "Invalid or expired token" });
   }
 };
-
-export default { verifyJWT, verifyAdmin, authMiddleware };
-
-// module.exports = authMiddleware;
