@@ -173,8 +173,8 @@ const createCategory = async (req, res) => {
 // Update category
 const updateCategory = async (req, res) => {
   try {
-    const { id } = req.params;
     const {
+      id,
       name,
       slug,
       description,
@@ -195,26 +195,26 @@ const updateCategory = async (req, res) => {
     }
 
     // Check if updating to a parent that would create a circular reference
-    if (parent) {
-      if (!mongoose.Types.ObjectId.isValid(parent)) {
-        return res.status(400).json({ error: "Invalid parent category ID" });
-      }
+    // if (parent) {
+    //   if (!mongoose.Types.ObjectId.isValid(parent)) {
+    //     return res.status(400).json({ error: "Invalid parent category ID" });
+    //   }
 
-      if (parent === id) {
-        return res
-          .status(400)
-          .json({ error: "Category cannot be its own parent" });
-      }
+    //   if (parent === id) {
+    //     return res
+    //       .status(400)
+    //       .json({ error: "Category cannot be its own parent" });
+    //   }
 
-      // Check for circular reference
-      let currentParent = await Category.findById(parent);
-      while (currentParent && currentParent.parent_id) {
-        if (currentParent.parent_id.toString() === id) {
-          return res.status(400).json({ error: "Circular reference detected" });
-        }
-        currentParent = await Category.findById(currentParent.parent_id);
-      }
-    }
+    //   // Check for circular reference
+    //   let currentParent = await Category.findById(parent);
+    //   while (currentParent && currentParent.parent_id) {
+    //     if (currentParent.parent_id.toString() === id) {
+    //       return res.status(400).json({ error: "Circular reference detected" });
+    //     }
+    //     currentParent = await Category.findById(currentParent.parent_id);
+    //   }
+    // }
 
     // Check name uniqueness
     if (name && name !== existingCategory.name) {
@@ -273,19 +273,20 @@ const updateCategory = async (req, res) => {
 const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
+    // console.log("Attempting to delete category with ID:", id); // Debug log
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ error: "Invalid category ID" });
     }
 
     // Check if category has children
-    const children = await Category.find({ parent_id: id });
-    if (children.length > 0) {
-      return res.status(400).json({
-        error:
-          "Cannot delete category with subcategories. Move or delete children first.",
-      });
-    }
+    // const children = await Category.find({ parent_id: id });
+    // if (children.length > 0) {
+    //   return res.status(400).json({
+    //     error:
+    //       "Cannot delete category with subcategories. Move or delete children first.",
+    //   });
+    // }
 
     const deleted = await Category.findByIdAndDelete(id);
 
@@ -293,8 +294,9 @@ const deleteCategory = async (req, res) => {
       return res.status(404).json({ error: "Category not found" });
     }
 
-    res.json({ message: "Category deleted successfully" });
+    res.json({ message: "Category Deleted Successfully" });
   } catch (error) {
+    console.error("Error deleting category:", error);
     res.status(500).json({ error: error.message });
   }
 };
