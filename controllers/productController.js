@@ -1,223 +1,421 @@
-import { mongoose, Types } from "mongoose";
-import path from "path";
-import fs from "fs";
-const fsPromises = fs.promises;
 import Product from "../models/productModel.js";
-import {
-  uploadToCloudinary,
-  deleteFromCloudinary,
-} from "../utils/cloudinary.js";
+import { deleteFromCloudinary } from "../utils/cloudinary.js";
 
-const getProducts = async (req, res) => {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const buildFilter = (query) => {
+  const filter = {};
+
+  if (query.search) {
+    filter.$text = { $search: query.search };
+  }
+  if (query.category) filter.category = query.category;
+  if (query.is_active !== undefined)
+    filter.is_active = query.is_active === "true";
+  if (query.tag) filter.tags = query.tag;
+
+  // Price range
+  if (query.minPrice || query.maxPrice) {
+    filter.regularPrice = {};
+    if (query.minPrice) filter.regularPrice.$gte = Number(query.minPrice);
+    if (query.maxPrice) filter.regularPrice.$lte = Number(query.maxPrice);
+  }
+
+  // Stock status
+  if (query.stockStatus === "out_of_stock") filter.stockQuantity = 0;
+  if (query.stockStatus === "low_stock") {
+    filter.$expr = { $lte: ["$stockQuantity", "$lowStockThreshold"] };
+    filter.stockQuantity = { $gt: 0 };
+  }
+  if (query.stockStatus === "in_stock") {
+    filter.$expr = { $gt: ["$stockQuantity", "$lowStockThreshold"] };
+  }
+
+  return filter;
+};
+
+// ─── Controllers ─────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/products
+ * List products with filtering, sorting, pagination
+ */
+export const getProducts = async (req, res) => {
   try {
-    // Destructure with defaults
-    let { name, price, categories, page = 1, limit = 10, sort: sortParam } = req.query;
-    const query = { is_active: true };
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = "created_at",
+      order = "desc",
+    } = req.query;
 
-    // Convert to array and validate categories
-    const categoryIds = [].concat(categories || []).filter(id => 
-      mongoose.Types.ObjectId.isValid(id)
-    );
+    const filter = buildFilter(req.query);
+    const skip = (Number(page) - 1) * Number(limit);
+    const sortOrder = order === "asc" ? 1 : -1;
 
-    // Pagination setup
-    const pagination = { skip: 0, limit: 10 };
-    if (limit === "all" || limit === 0) {
-      pagination.limit = 0;
-      page = 1;
-    } else {
-      pagination.limit = Number(limit) || 10;
-      page = Math.max(1, Number(page) || 1);
-    }
-    pagination.skip = pagination.limit === 0 ? 0 : (page - 1) * pagination.limit;
-
-    // Build filters
-    if (name) {
-      query.$text = { $search: name };
-    }
-    if (price && !isNaN(price)) {
-      query.price = Number(price);
-    }
-    if (categoryIds.length > 0) {
-      query.category = { $in: categoryIds.map(id => new mongoose.Types.ObjectId(id)) };
-    }
-
-    // Sorting (enhanced)
-    const sort = {};
-    if (name) {
-      sort.score = { $meta: "textScore" };
-    } else if (sortParam) {
-      // Handle custom sort params like "price_asc", "name_desc"
-      const [field, order] = sortParam.split('_');
-      sort[field] = order === 'desc' ? -1 : 1;
-    } else {
-      sort.name = 1; // Default
-    }
-
-    // Execute queries
-    const [totalProducts, products] = await Promise.all([
-      Product.countDocuments(query),
-      Product.find(query)
-        .select('name price unit quantity imgUrl category')
-        .sort(sort)
-        .populate("category", "name")
-        .lean()
-        .skip(pagination.skip)
-        .limit(pagination.limit || undefined)
-        .maxTimeMS(5000),
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .populate("category", "name slug")
+        .sort({ [sortBy]: sortOrder })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean({ virtuals: true }),
+      Product.countDocuments(filter),
     ]);
 
     res.status(200).json({
       success: true,
-      totalProducts,
-      totalPages: pagination.limit === 0 ? 1 : Math.ceil(totalProducts / pagination.limit),
-      currentPage: page,
-      products,
-      filters: { // Return active filters
-        ...(name && { name }),
-        ...(price && { price: Number(price) }),
-        ...(categoryIds.length > 0 && { categories: categoryIds })
-      }
+      data: products,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (err) {
-    console.error(`Product API Error: ${err.message}`, {
-      query: req.query,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
-
-    res.status(500).json({ 
-      success: false,
-      message: "Failed to fetch products",
-      ...(process.env.NODE_ENV === 'development' && { error: err.message })
-    });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
-async function processProductImage(newProduct, file) {
-  if (!file) return;
-
+/**
+ * GET /api/products/:id
+ * Single product by Mongo _id  OR  slug
+ */
+export const getProduct = async (req, res) => {
   try {
-    // Upload to Cloudinary
-    const result = await uploadToCloudinary(file.buffer, "products");
+    const { id } = req.params;
+    const filter = id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : { slug: id };
 
-    // Save the secure URL to your database
-    newProduct.imgUrl = result.secure_url;
-    newProduct.imgPublicId = result.public_id;
-    return await newProduct.save();
-  } catch (error) {
-    console.error("Image upload error:", error);
-    throw error;
-  }
-}
+    const product = await Product.findOne(filter)
+      .populate("category", "name slug")
+      .lean({ virtuals: true });
 
-const addProduct = async (req, res) => {
-  try {
-    const { name, price, unit, quantity, category } = req.body;
-
-    // Check if product already exists within the category
-    const existingProduct = await Product.findOne({
-      name: name.trim(),
-      category,
-      is_active: true,
-    });
-
-    if (existingProduct) {
-      return res.status(400).json({
-        success: false,
-        message: "Product with the same name already exists in this category",
-      });
-    }
-
-    const newProduct = new Product({ name, price, unit, quantity, category });
-
-    await newProduct.save();
-
-    // Process image upload separately
-    setImmediate(async () => {
-      if (req.file) await processProductImage(newProduct, req.file);
-    });
-
-    res.status(201).json({ success: true, data: newProduct });
-  } catch (error) {
-    console.error("Error adding product:", error);
-    res.status(500).json({ success: false, message: "Failed to save product" });
-  }
-};
-
-const updateProduct = async (req, res) => {
-  try {
-    const { name, price, category, unit, quantity } = req.body;
-    const productId = req.params.id;
-
-    // Check for duplicate product name in same category (exclude self)
-    const existingProduct = await Product.findOne({
-      _id: { $ne: productId },
-      name: name.trim(),
-      category,
-    });
-
-    if (existingProduct) {
-      return res.status(400).json({
-        success: false,
-        message: "Product with the same name already exists in this category",
-      });
-    }
-
-    // Find current product
-    const product = await Product.findById(productId);
-
-    if (!product) {
+    if (!product)
       return res
         .status(404)
         .json({ success: false, message: "Product not found" });
-    }
 
-    const updatedData = { name, price, category, unit, quantity };
+    res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
-    // If a new image is uploaded
-    if (req.file) {
-      // 1. Delete old image from Cloudinary
-      if (product.imgPublicId) {
-        await deleteFromCloudinary(product.imgPublicId);
+/**
+ * POST /api/products
+ * Create product. Images via multipart/form-data (field: "images").
+ * Other fields sent as JSON in "data" field OR as flat form fields.
+ */
+export const createProduct = async (req, res) => {
+  try {
+    // console.log("Files received:", req.files);
+    // Parse body – support both JSON body and multipart form fields
+    let body = req.body;
+    // console.log("Raw request body:", body);
+    if (typeof body.data === "string") body = JSON.parse(body.data);
+
+    // Parse array/object fields that may arrive as strings from formData
+    ["tags"].forEach((key) => {
+      if (typeof body[key] === "string") {
+        try {
+          body[key] = JSON.parse(body[key]);
+        } catch {
+          body[key] = body[key].split(",").map((s) => s.trim());
+        }
       }
-
-      // 2. Upload new image to Cloudinary
-      const uploaded = await uploadToCloudinary(req.file.buffer, "products");
-
-      updatedData.imgUrl = uploaded.secure_url;
-      updatedData.imgPublicId = uploaded.public_id;
-    }
-
-    // 3. Update product in DB
-    const updated = await Product.findByIdAndUpdate(productId, updatedData, {
-      new: true,
     });
 
-    res.status(200).json({ success: true, data: updated });
-  } catch (error) {
-    console.error("Error updating product:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to update product" });
-  }
-};
+    // Build images array from uploaded files
+    const uploadedImages = (req.files || []).map((file, idx) => ({
+      url: file.path, // Cloudinary secure URL
+      publicId: file.filename, // Cloudinary public_id
+      isFeatured: idx === 0, // first upload is featured by default
+      order: idx,
+    }));
 
-const deactivateProduct = async (req, res) => {
-  try {
-      const { id } = req.params;
-      const product = await Product.findById(id);
+    const product = await Product.create({ ...body, images: uploadedImages });
+    await product.populate("category", "name slug");
 
-      if (!product) {
-          return res.status(404).json({ success: false, message: 'Category not found' });
-      }
-
-      product.is_active = false; // assuming you have an `is_active` field
-      await product.save();
-
-      return res.json({ success: true, message: 'Product removed successfully.' });
+    res.status(201).json({ success: true, data: product });
   } catch (err) {
-      console.error(err);
-      return res.status(500).json({ success: false, message: 'Server error' });
+    console.error("Create product error:", err);
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern)[0];
+      return res
+        .status(409)
+        .json({ success: false, message: `${field} already exists` });
+    }
+    res.status(400).json({ success: false, message: err.message });
   }
 };
 
-export default { getProducts, addProduct, updateProduct, deactivateProduct };
+/**
+ * PUT /api/products/:id
+ * Full update (non-image fields). Send JSON body.
+ */
+export const updateProduct = async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body.data === "string") body = JSON.parse(body.data);
+
+    ["tags"].forEach((key) => {
+      if (typeof body[key] === "string") {
+        try {
+          body[key] = JSON.parse(body[key]);
+        } catch {
+          body[key] = body[key].split(",").map((s) => s.trim());
+        }
+      }
+    });
+
+    // Don't allow overwriting images via this route
+    delete body.images;
+
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      { $set: body },
+      { new: true, runValidators: true },
+    ).populate("category", "name slug");
+
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+
+    res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern)[0];
+      return res
+        .status(409)
+        .json({ success: false, message: `${field} already exists` });
+    }
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * DELETE /api/products/:id
+ * Delete product and all its Cloudinary images
+ */
+export const deleteProduct = async (req, res) => {
+  try {
+    const product = await Product.findByIdAndDelete(req.params.id);
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+
+    // Remove all images from Cloudinary
+    await Promise.all(
+      product.images.map((img) => deleteFromCloudinary(img.publicId)),
+    );
+
+    res
+      .status(200)
+      .json({ success: true, message: "Product deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─── Image sub-resource controllers ──────────────────────────────────────────
+
+/**
+ * POST /api/products/:id/images
+ * Upload one or more images to an existing product.
+ * multipart/form-data field: "images"
+ */
+export const addImages = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+
+    if (!req.files?.length) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No images provided" });
+    }
+
+    const totalAfter = product.images.length + req.files.length;
+    if (totalAfter > 20) {
+      // Delete the just-uploaded extras from Cloudinary to avoid orphans
+      await Promise.all(req.files.map((f) => deleteFromCloudinary(f.filename)));
+      return res.status(400).json({
+        success: false,
+        message: `Cannot exceed 20 images. Current: ${product.images.length}, uploading: ${req.files.length}`,
+      });
+    }
+
+    const newImages = req.files.map((file, idx) => ({
+      url: file.path,
+      publicId: file.filename,
+      isFeatured: false,
+      order: product.images.length + idx,
+    }));
+
+    // Auto-feature if product had no images
+    if (product.images.length === 0 && newImages.length > 0) {
+      newImages[0].isFeatured = true;
+    }
+
+    product.images.push(...newImages);
+    await product.save();
+    await product.populate("category", "name slug");
+
+    res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * DELETE /api/products/:id/images/:imageId
+ * Remove a single image from a product
+ */
+export const removeImage = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+
+    const imgIndex = product.images.findIndex(
+      (img) => img._id.toString() === req.params.imageId,
+    );
+    if (imgIndex === -1)
+      return res
+        .status(404)
+        .json({ success: false, message: "Image not found" });
+
+    const [removed] = product.images.splice(imgIndex, 1);
+    await deleteFromCloudinary(removed.publicId);
+
+    // If removed image was featured, promote next available
+    if (removed.isFeatured && product.images.length > 0) {
+      product.images[0].isFeatured = true;
+    }
+
+    await product.save();
+    await product.populate("category", "name slug");
+
+    res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * PATCH /api/products/:id/images/:imageId/featured
+ * Set an image as the featured image for the product
+ */
+export const setFeaturedImage = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+
+    let found = false;
+    product.images.forEach((img) => {
+      if (img._id.toString() === req.params.imageId) {
+        img.isFeatured = true;
+        found = true;
+      } else {
+        img.isFeatured = false;
+      }
+    });
+
+    if (!found)
+      return res
+        .status(404)
+        .json({ success: false, message: "Image not found" });
+
+    await product.save();
+    await product.populate("category", "name slug");
+
+    res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * PATCH /api/products/:id/images/reorder
+ * Body: { order: ["imageId1", "imageId2", ...] }
+ * Re-order images by providing a sorted list of image _ids
+ */
+export const reorderImages = async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order)) {
+      return res.status(400).json({
+        success: false,
+        message: "`order` must be an array of image ids",
+      });
+    }
+
+    const product = await Product.findById(req.params.id);
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+
+    const imageMap = new Map(
+      product.images.map((img) => [img._id.toString(), img]),
+    );
+
+    const reordered = order
+      .map((imgId, idx) => {
+        const img = imageMap.get(imgId);
+        if (img) img.order = idx;
+        return img;
+      })
+      .filter(Boolean);
+
+    if (reordered.length !== product.images.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Image id list does not match product images",
+      });
+    }
+
+    product.images = reordered;
+    await product.save();
+    await product.populate("category", "name slug");
+
+    res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+/**
+ * PATCH /api/products/:id/toggle-status
+ * Toggle is_active
+ */
+export const toggleStatus = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+
+    product.is_active = !product.is_active;
+    await product.save();
+
+    res.status(200).json({
+      success: true,
+      data: { _id: product._id, is_active: product.is_active },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

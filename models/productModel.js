@@ -1,61 +1,137 @@
-import mongoose from 'mongoose';
-import './categoryModel.js';
+import mongoose from "mongoose";
 
-const productSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
+const imageSchema = new mongoose.Schema(
+  {
+    url: { type: String, required: true },
+    publicId: { type: String, required: true },
+    isFeatured: { type: Boolean, default: false },
+    order: { type: Number, default: 0 },
   },
-  price: {
-    type: Number,
-    required: true,
-    min: [0, 'Price must be a positive number'],
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: [1, 'Quantity must be a positive number'],
-  },
-  unit: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  imgUrl: {
-    type: String,
-    default: null,
-    trim: true,
-  },
-  imgPublicId: {
-    type: String,
-    default: null,
-    trim: true,
-  },
-  category: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Category',
-    required: true,
-  },
-  is_active: {
-    type: Boolean,
-    default: true,
-  },
-}, {
-  timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-  autoIndex: true, // Ensure indexes are created automatically
-  minimize: false, // Prevent Mongoose from minimizing the schema
-  toJSON: { virtuals: true }, // If you use virtuals
-  toObject: { virtuals: true },
-  id: false // Disable the redundant id virtual
-});
+  { _id: false },
+);
 
-productSchema.index({ name: 1 }); // Single field index for name
-productSchema.index({ category: 1, is_active: 1 }); // For category filtering
-productSchema.index({ price: 1 }); // For price filtering
-productSchema.index({ is_active: 1 }); // For active products filter
-productSchema.index({ name: "text", category: 1, is_active: 1 }); // Compound text index
+const productSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-const Product = mongoose.model('Product', productSchema);
+    sku: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+
+    slug: {
+      type: String,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+
+    description: {
+      type: String,
+      trim: true,
+    },
+
+    category: {
+      type: String,
+      required: true,
+    },
+
+    // 💰 Pricing
+    regularPrice: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    salePrice: {
+      type: Number,
+      min: 0,
+      validate: {
+        validator: function (value) {
+          return !value || value <= this.regularPrice;
+        },
+        message: "Sale price must be less than regular price",
+      },
+    },
+
+    cost: {
+      type: Number,
+      min: 0,
+    },
+
+    // 📦 Inventory
+    stockQuantity: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    lowStockThreshold: {
+      type: Number,
+      default: 5,
+    },
+
+    unit: {
+      type: String,
+      trim: true,
+    },
+
+    // ⚖️ Physical
+    weight: {
+      type: Number,
+    },
+
+    dimensions: {
+      type: String,
+    },
+
+    // 🏷️ Tags
+    tags: {
+      type: [String],
+      default: [],
+    },
+
+    // 🖼️ Images (MULTIPLE)
+    images: {
+      type: [imageSchema],
+      default: [],
+    },
+
+    // 🔍 SEO
+    metaTitle: {
+      type: String,
+      trim: true,
+    },
+
+    metaDescription: {
+      type: String,
+      trim: true,
+    },
+
+    // 📊 Status
+    is_active: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
+    timestamps: true,
+    minimize: false,
+  },
+);
+
+// 🔎 Indexing
+productSchema.index({ name: "text", description: "text" });
+productSchema.index({ category: 1 });
+productSchema.index({ is_active: 1 });
+productSchema.index({ price: 1 });
+
+const Product = mongoose.model("Product", productSchema);
 
 export default Product;

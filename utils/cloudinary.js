@@ -1,34 +1,45 @@
-import { v2 as cloudinary } from 'cloudinary';
-import dotenv from 'dotenv';
-import { Readable } from 'stream';
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
 
-dotenv.config();
-
-cloudinary.config({ 
-    cloud_name    : process.env.CLOUDINARY_CLOUD_NAME,
-    api_key       : process.env.CLOUDINARY_API_KEY,
-    api_secret    : process.env.CLOUDINARY_API_SECRET
+export const initCloudinary = () => {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+};
+// Cloudinary config (set these in your .env)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export const uploadToCloudinary = async (fileBuffer, folder) => {
-    return new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-            { folder, resource_type: 'auto' },
-            (error, result) => {
-                if (error) reject(error);
-                else resolve(result);
-            }
-        );
-        
-        // Create a readable stream from buffer
-        const stream = Readable.from(fileBuffer);
-        stream.pipe(uploadStream);
-    });
-};
+console.log("Cloudinary config:", {
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY ? "set" : "not set",
+  api_secret: process.env.CLOUDINARY_API_SECRET ? "set" : "not set",
+});
 
-// Delete image from Cloudinary using public_id
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "products",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    transformation: [
+      { width: 1200, height: 1200, crop: "limit", quality: "auto" },
+    ],
+  },
+});
+
+export const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB per file
+});
+
+/** Delete one image from Cloudinary by its publicId */
 export const deleteFromCloudinary = async (publicId) => {
-  return cloudinary.uploader.destroy(publicId);
+  if (!publicId) return;
+  await cloudinary.uploader.destroy(publicId);
 };
-
-export default cloudinary;
