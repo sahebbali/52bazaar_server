@@ -40,44 +40,70 @@ const buildFilter = (query) => {
  * GET /api/products
  * List products with filtering, sorting, pagination
  */
-export const getProducts = async (req, res) => {
+export const getAllProducts = async (req, res) => {
   try {
     const {
       page = 1,
       limit = 10,
-      sortBy = "created_at",
-      order = "desc",
+      search = "",
+      category,
+      status,
+      stockStatus,
     } = req.query;
 
-    const filter = buildFilter(req.query);
-    const skip = (Number(page) - 1) * Number(limit);
-    const sortOrder = order === "asc" ? 1 : -1;
+    const query = {};
 
-    const [products, total] = await Promise.all([
-      Product.find(filter)
-        .populate("category", "name slug")
-        .sort({ [sortBy]: sortOrder })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean({ virtuals: true }),
-      Product.countDocuments(filter),
-    ]);
+    // 🔍 Search
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { sku: { $regex: search, $options: "i" } },
+      ];
+    }
 
-    res.status(200).json({
+    // 📂 Category
+    if (category) {
+      query.category = category; // must be ObjectId
+    }
+
+    // 📊 Status
+    if (status) {
+      query.is_active = status === "active";
+    }
+
+    // 📦 Stock Status
+    if (stockStatus === "in") {
+      query.stockQuantity = { $gt: 10 };
+    }
+    if (stockStatus === "low") {
+      query.stockQuantity = { $gt: 0, $lte: 10 };
+    }
+    if (stockStatus === "out") {
+      query.stockQuantity = 0;
+    }
+
+    const products = await Product.find(query)
+      .populate("category", "name")
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .sort({ createdAt: -1 });
+
+    const total = await Product.countDocuments(query);
+
+    res.json({
       success: true,
       data: products,
       pagination: {
         total,
         page: Number(page),
         limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit)),
       },
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error(err);
+    res.status(500).json({ message: "Server Error" });
   }
 };
-
 /**
  * GET /api/products/:id
  * Single product by Mongo _id  OR  slug
@@ -85,7 +111,9 @@ export const getProducts = async (req, res) => {
 export const getProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    // console.log("Received id for getProduct:", id);
     const filter = id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : { slug: id };
+    // console.log("Filter for getProduct:", filter);
 
     const product = await Product.findOne(filter)
       .populate("category", "name slug")
@@ -156,45 +184,78 @@ export const createProduct = async (req, res) => {
  */
 export const updateProduct = async (req, res) => {
   try {
-    let body = req.body;
-    if (typeof body.data === "string") body = JSON.parse(body.data);
+    const body = req.body;
+    // console.log("Update product body:", body);
 
-    ["tags"].forEach((key) => {
-      if (typeof body[key] === "string") {
-        try {
-          body[key] = JSON.parse(body[key]);
-        } catch {
-          body[key] = body[key].split(",").map((s) => s.trim());
-        }
+    const id = body.id; // 👈 get from body
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID is required",
+      });
+    }
+
+    // Parse tags
+    if (typeof body.tags === "string") {
+      body.tags = JSON.parse(body.tags);
+    }
+    // ✅ Convert numeric fields
+    const numberFields = [
+      "regularPrice",
+      "salePrice",
+      "cost",
+      "stockQuantity",
+      "lowStockThreshold",
+      "weight",
+    ];
+
+    numberFields.forEach((field) => {
+      if (body[field] !== undefined) {
+        body[field] = Number(body[field]);
       }
     });
 
-    // Don't allow overwriting images via this route
     delete body.images;
+    delete body.id; // 👈 prevent updating _id
+    console.log("Final update body after processing:", body);
 
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { $set: body },
-      { new: true, runValidators: true },
-    ).populate("category", "name slug");
-
-    if (!product)
-      return res
-        .status(404)
-        .json({ success: false, message: "Product not found" });
-
-    res.status(200).json({ success: true, data: product });
-  } catch (err) {
-    if (err.code === 11000) {
-      const field = Object.keys(err.keyPattern)[0];
-      return res
-        .status(409)
-        .json({ success: false, message: `${field} already exists` });
+    if (
+      body.salePrice !== undefined &&
+      body.regularPrice !== undefined &&
+      body.salePrice >= body.regularPrice
+    ) {
+      console.log("Sale price must be less than regular price");
+      return res.status(400).json({
+        success: false,
+        message: "Sale price must be less than regular price",
+      });
     }
-    res.status(400).json({ success: false, message: err.message });
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { $set: body },
+      { new: true },
+    );
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: product,
+    });
+  } catch (err) {
+    console.error("Update product error:", err);
+    res.status(400).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
-
 /**
  * DELETE /api/products/:id
  * Delete product and all its Cloudinary images

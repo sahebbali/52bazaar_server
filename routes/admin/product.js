@@ -5,8 +5,8 @@ import {
   addImages,
   createProduct,
   deleteProduct,
+  getAllProducts,
   getProduct,
-  getProducts,
   removeImage,
   reorderImages,
   setFeaturedImage,
@@ -17,8 +17,8 @@ import {
 const router = express.Router();
 
 // ─── Product CRUD ─────────────────────────────────────────────────────────────
-router.get("/", getProducts); // GET    /api/products
-router.get("/:id", getProduct); // GET    /api/products/:id  (id OR slug)
+router.get("/get-all-products", getAllProducts); // GET    /api/products
+router.get("/get-product-by-id/:id", getProduct); // GET    /api/products/:id  (id OR slug)
 router.post(
   "/add-product",
   (req, res, next) => {
@@ -32,8 +32,20 @@ router.post(
   },
   createProduct,
 );
-router.put("/:id", updateProduct); // PUT    /api/products/:id
-router.delete("/:id", deleteProduct); // DELETE /api/products/:id
+router.put(
+  "/update-product",
+  (req, res, next) => {
+    upload.array("images", 20)(req, res, function (err) {
+      if (err) {
+        console.log("route err", err);
+        return res.status(400).json({ message: err.message });
+      }
+      next();
+    });
+  },
+  updateProduct,
+); // PUT    /api/products/:id
+router.delete("/delete-product/:id", deleteProduct); // DELETE /api/products/:id
 
 // ─── Image sub-resource ───────────────────────────────────────────────────────
 router.post("/:id/images", upload.array("images", 20), addImages); // POST   /api/products/:id/images
