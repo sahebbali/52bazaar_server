@@ -1,63 +1,160 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
-const orderSchema = new mongoose.Schema({
-    user: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'User', 
-        required: [true, 'User reference is required'] 
-    },
-    items: [{
-        product: { 
-            type: mongoose.Schema.Types.ObjectId, 
-            ref: 'Product',
-            required: [true, 'Product reference is required']
-        },
-        quantity: { 
-            type: Number, 
-            required: [true, 'Quantity is required'],
-            min: [1, 'Quantity must be at least 1']
-        },
-        priceAtPurchase: {  // Store price at time of purchase
-            type: Number,
-            required: [true, 'Price at purchase is required']
-        }
-    }],
-    totalAmount: { 
-        type: Number, 
-        required: [true, 'Total amount is required'],
-        min: [0, 'Total amount cannot be negative']
-    },
-    shippingAddress: {
-        name: { type: String, required: [true, 'Recipient name is required'] },
-        phone: { type: String, required: [true, 'Recipient phone is required'] },
-        street: { type: String, required: [true, 'Street address is required'] },
-        city: { type: String, required: [true, 'City is required'] },
-        additionalInfo: String  // For apartment, floor, etc.
-    },
-    paymentMethod: { 
-        type: String, 
-        enum: ['cod', 'mfs'], 
-        required: [true, 'Payment method is required'] 
-    },
-    paymentStatus: {
-        type: String,
-        enum: ['pending', 'paid', 'failed', 'refunded'],
-        default: 'pending'
-    },
-    status: { 
-        type: String, 
-        enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'],
-        default: 'pending'
-    },
-    trackingNumber: String,
-    notes: String  // For any special instructions
-}, {
-    timestamps: true
+const orderItemSchema = new mongoose.Schema({
+  product: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Product",
+    required: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+  image: {
+    type: String,
+    required: true,
+  },
+  sku: {
+    type: String,
+    required: true,
+  },
+  quantity: {
+    type: Number,
+    required: true,
+    min: 1,
+  },
+  price: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
 });
 
-// Indexes for better query performance
-orderSchema.index({ user: 1 });
-orderSchema.index({ status: 1 });
-orderSchema.index({ createdAt: -1 });  // For getting recent orders first
+const timelineSchema = new mongoose.Schema({
+  status: {
+    type: String,
+    required: true,
+  },
+  date: {
+    type: Date,
+    default: Date.now,
+  },
+  note: String,
+});
+
+const orderSchema = new mongoose.Schema(
+  {
+    orderId: {
+      type: String,
+      unique: true,
+      required: true,
+    },
+    customer: {
+      name: {
+        type: String,
+        required: true,
+      },
+      email: {
+        type: String,
+        required: true,
+        lowercase: true,
+      },
+      phone: String,
+      address: {
+        type: String,
+      },
+    },
+    items: [orderItemSchema],
+    itemsCount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    subtotal: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    shipping: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+    tax: {
+      type: Number,
+      default: 0,
+    },
+    total: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    status: {
+      type: String,
+      enum: ["pending", "processing", "shipped", "delivered", "cancelled"],
+      default: "pending",
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "paid", "failed", "refunded"],
+      default: "pending",
+    },
+    payment: {
+      method: {
+        type: String,
+        enum: ["nagad", "bkash", "bank_transfer", "cash_on_delivery"],
+      },
+      transactionId: String,
+      paymentDate: Date,
+    },
+    timeline: [timelineSchema],
+    notes: String,
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+// Generate order ID before saving
+orderSchema.pre("save", async function (next) {
+  if (!this.orderId) {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const count = await this.constructor.countDocuments();
+    this.orderId = `ORD-${year}${month}-${String(count + 1).padStart(4, "0")}`;
+  }
+  next();
+});
+
+// Update timeline when status changes
+orderSchema.pre("save", function (next) {
+  if (this.isModified("status")) {
+    const statusMessages = {
+      pending: "Order placed and awaiting processing",
+      processing: "Order is being processed",
+      shipped: "Order has been shipped",
+      delivered: "Order has been delivered",
+      cancelled: "Order has been cancelled",
+    };
+
+    this.timeline.push({
+      status: this.status,
+      date: new Date(),
+      note: statusMessages[this.status],
+    });
+  }
+  next();
+});
+
+//
 
 export default mongoose.model("Order", orderSchema);

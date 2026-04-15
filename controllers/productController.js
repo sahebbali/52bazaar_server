@@ -269,9 +269,9 @@ export const deleteProduct = async (req, res) => {
         .json({ success: false, message: "Product not found" });
 
     // Remove all images from Cloudinary
-    await Promise.all(
-      product.images.map((img) => deleteFromCloudinary(img.publicId)),
-    );
+    // await Promise.all(
+    //   product.images.map((img) => deleteFromCloudinary(img.publicId)),
+    // );
 
     res
       .status(200)

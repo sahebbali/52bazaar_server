@@ -1,12 +1,12 @@
 // routes/order.js
 import express from "express";
 const router = express.Router();
-import Order from "../models/orderModel.js";
-import orderController from "../controllers/orderController.js";
 
-router.get("/orders", orderController.getOrders);
-router.get("/orders/:id", orderController.getOrderDetails);
-router.post("/place-order", orderController.placeOrder);
+import orderController from "../../controllers/orderController.js";
+
+router.get("/orders", orderController.getAllOrdersAdmin);
+// router.get("/orders/:id", orderController.getOrderDetails);
+router.post("/place-order", orderController.createOrder);
 
 // router.get("/my-orders", authMiddleware, async (req, res) => {
 //   const orders = await Order.find({ user: req.user._id }).populate(

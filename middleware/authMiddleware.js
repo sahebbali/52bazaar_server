@@ -75,6 +75,30 @@ export const verifyAdmin = async (req, res, next) => {
     });
   }
 };
+export const verifyUser = async (req, res, next) => {
+  try {
+    const requester = req.auth.email;
+    console.log("Requester ID from user token:", requester); // Debug log
+    const requesterAccount = await User.findOne({
+      $or: [{ userId: requester }, { email: requester }],
+    });
+    if (requesterAccount?.role === "user") {
+      next();
+    } else {
+      return res.status(401).send({
+        error: {
+          message: "Not authorized, token failed",
+        },
+      });
+    }
+  } catch (e) {
+    return res.status(401).send({
+      error: {
+        message: e.message,
+      },
+    });
+  }
+};
 export const authMiddleware = async (req, res, next) => {
   const token = req.headers["authorization"];
   if (!token) return res.status(401).json({ message: "Token missing" });
