@@ -60,8 +60,9 @@ const getAllOrdersAdmin = async (req, res) => {
 // @access  Private
 const getOrderById = async (req, res) => {
   try {
+    console.log("Fetching order with ID:", req.params.id); // Debug log
     const order = await Order.findOne({
-      $or: [{ _id: req.params.id }, { orderId: req.params.id }],
+      $or: [{ orderId: req.params.id }],
     });
 
     if (!order) {
@@ -261,8 +262,9 @@ const updateOrderStatus = async (req, res) => {
     const { status, note, sendEmail } = req.body;
 
     const order = await Order.findOne({
-      $or: [{ _id: req.params.id }, { orderId: req.params.id }],
+      $or: [{ orderId: req.params.id }],
     });
+    console.log("Updating order status for ID:", req.params.id, "to", status); // Debug log
 
     if (!order) {
       return res
@@ -285,7 +287,11 @@ const updateOrderStatus = async (req, res) => {
       );
     }
 
-    res.json({ success: true, order });
+    res.json({
+      success: true,
+      order,
+      message: "Order status updated successfully",
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

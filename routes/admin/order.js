@@ -10,11 +10,11 @@ router.post("/create-order", orderController.createOrder);
 router.get("/stats/summary", orderController.getOrderStats);
 router.put("/bulk/status", orderController.bulkUpdateStatus);
 
-router.get("/get-order-by-id:id", orderController.getOrderById);
+router.get("/get-order-by-id/:id", orderController.getOrderById);
 
 router.delete("/delete-order", orderController.deleteOrder);
 
-router.put("/:id/status", orderController.updateOrderStatus);
+router.put("/update-order-status/:id", orderController.updateOrderStatus);
 router.put("/:id/payment", orderController.updatePaymentStatus);
 
 export default router;
