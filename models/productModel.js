@@ -119,6 +119,14 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    notes: {
+      type: String,
+      trim: true,
+    },
+    reason: {
+      type: [],
+      trim: true,
+    },
   },
   {
     timestamps: true,
