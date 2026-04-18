@@ -50,10 +50,41 @@ const userSchema = new mongoose.Schema(
       },
     ],
     phone: String, // Main contact number
+    avatar: {
+      type: String,
+      default: null,
+    },
+    joinDate: {
+      type: Date,
+      default: Date.now,
+    },
+    newsletter: {
+      type: Boolean,
+      default: true,
+    },
+    emailNotifications: {
+      type: Boolean,
+      default: true,
+    },
+    smsAlerts: {
+      type: Boolean,
+      default: false,
+    },
+    wishlist: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
     role: {
       type: String,
       enum: ["user", "admin"],
       default: "user",
+    },
+    likeMedia: {
+      type: String,
+      enum: ["website", "system"],
+      default: "website",
     },
   },
   {

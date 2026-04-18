@@ -3,17 +3,42 @@ import bcrypt from "bcryptjs";
 
 export const createUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      password,
+      confirmPassword,
+      addresses,
+      agreeToTerms,
+      newsletter,
+    } = req.body;
+    // console.log("Create User Request Body:", req.body);
 
-    // 🔹 Basic validation
-    if (!name || !email || !password) {
+    // 🔹 Required fields validation
+    if (
+      !name ||
+      !email ||
+      !phone ||
+      !addresses ||
+      !password ||
+      !confirmPassword
+    ) {
       return res.status(400).json({
         success: false,
         message: "All fields are required",
       });
     }
 
-    // 🔹 Email format validation (simple)
+    // 🔹 Terms agreement check
+    if (!agreeToTerms) {
+      return res.status(400).json({
+        success: false,
+        message: "You must agree to terms and conditions",
+      });
+    }
+
+    // 🔹 Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -22,7 +47,24 @@ export const createUser = async (req, res) => {
       });
     }
 
-    // 🔹 Password strength check
+    // 🔹 Phone validation (basic)
+    const phoneRegex = /^[0-9]{10,15}$/;
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number",
+      });
+    }
+
+    // 🔹 Password match check
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match",
+      });
+    }
+
+    // 🔹 Password strength
     if (password.length < 6) {
       return res.status(400).json({
         success: false,
@@ -41,9 +83,12 @@ export const createUser = async (req, res) => {
 
     // 🔹 Create user
     const newUser = await User.create({
-      name,
+      name, // map frontend -> DB
       email,
+      phone,
+      address: addresses,
       password,
+      newsletter,
     });
 
     // 🔹 Remove password from response
@@ -79,7 +124,8 @@ export const getUsers = async (req, res) => {
 // Get a single user by ID
 export const getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const requester = req.auth.email;
+    const user = await User.findOne({ email: requester }).select("-password");
     if (!user) return res.status(404).json({ message: "User not found" });
 
     res.status(200).json(user);
@@ -92,9 +138,17 @@ export const getUserById = async (req, res) => {
 // Update a user
 export const updateUser = async (req, res) => {
   try {
-    const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    });
+    console.log("Update User Request Body:", req.body);
+    const requester = req.auth.email;
+    const user = await User.findOne({ email: requester });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const updatedUser = await User.findOneAndUpdate(
+      { email: requester },
+      req.body,
+      {
+        new: true,
+      },
+    );
     if (!updatedUser)
       return res.status(404).json({ message: "User not found" });
 
@@ -104,6 +158,42 @@ export const updateUser = async (req, res) => {
   } catch (error) {
     console.error("Error updating user:", error);
     res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+// Update a user
+export const deleteUserAddress = async (req, res) => {
+  try {
+    const { id } = req.body;
+
+    if (!id) {
+      return res.status(400).json({ message: "Address ID is required" });
+    }
+
+    const requester = req.auth?.email;
+    if (!requester) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const updatedUser = await User.findOneAndUpdate(
+      { email: requester },
+      { $pull: { addresses: { _id: id } } },
+      { new: true },
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "Address deleted successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Error deleting user address:", error);
+    return res.status(500).json({
+      message: "Internal Server Error",
+      error: error.message, // optional, useful for debugging
+    });
   }
 };
 
@@ -121,4 +211,11 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-export default { createUser, getUsers, getUserById, updateUser, deleteUser };
+export default {
+  createUser,
+  getUsers,
+  getUserById,
+  updateUser,
+  deleteUserAddress,
+  deleteUser,
+};
