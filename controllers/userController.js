@@ -283,6 +283,50 @@ export const updatePassword = async (req, res) => {
     });
   }
 };
+export const updateUserPreferences = async (req, res) => {
+  try {
+    const requester = req.auth?.email;
+    if (!requester) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const { newsletter, emailNotifications, smsAlerts } = req.body;
+
+    const updatedUser = await User.findOneAndUpdate(
+      { email: requester },
+      {
+        $set: {
+          ...(newsletter !== undefined && { newsletter }),
+          ...(emailNotifications !== undefined && { emailNotifications }),
+          ...(smsAlerts !== undefined && { smsAlerts }),
+        },
+      },
+      { new: true },
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Preferences updated successfully",
+      data: updatedUser,
+    });
+  } catch (error) {
+    console.error("Update Preferences Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
 export default {
   createUser,
   getUsers,
@@ -291,4 +335,5 @@ export default {
   deleteUserAddress,
   updatePassword,
   deleteUser,
+  updateUserPreferences,
 };
