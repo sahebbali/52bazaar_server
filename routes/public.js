@@ -8,4 +8,6 @@ router.get("/get-all-categories", publicController.getAllCategories);
 
 router.get("/get-all-products", publicController.getAllProducts);
 
+router.get("/get-product-list", publicController.getProductList);
+
 export default router;
