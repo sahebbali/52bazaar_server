@@ -406,6 +406,79 @@ const getOrderStats = async (req, res) => {
   }
 };
 
+const getMyOrders = async (req, res) => {
+  try {
+    const {
+      status,
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = req.query;
+    const requester = req.auth.email;
+    console.log("Requester: get order", requester);
+    // Build query
+    let query = { "customer.email": requester };
+
+    // Add status filter if provided
+    if (status && status !== "all") {
+      query.status = status;
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+
+    // Execute queries in parallel
+    const [orders, totalCount] = await Promise.all([
+      Order.find(query).sort(sort).skip(skip).limit(parseInt(limit)),
+      Order.countDocuments(query),
+    ]);
+
+    // Get status counts for filters
+    const statusCounts = await Order.aggregate([
+      { $match: { "customer.email": requester } },
+      { $group: { _id: "$status", count: { $sum: 1 } } },
+    ]);
+
+    const statusSummary = {
+      all: totalCount,
+      pending: 0,
+      processing: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+      refunded: 0,
+    };
+
+    statusCounts.forEach((item) => {
+      if (statusSummary.hasOwnProperty(item._id)) {
+        statusSummary[item._id] = item.count;
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: orders,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalCount / parseInt(limit)),
+        totalItems: totalCount,
+        itemsPerPage: parseInt(limit),
+      },
+      statusSummary,
+      message: "Orders fetched successfully",
+    });
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch orders",
+      error: error.message,
+    });
+  }
+};
+
 export default {
   getAllOrdersAdmin,
   getOrderById,
@@ -415,4 +488,5 @@ export default {
   updatePaymentStatus,
   deleteOrder,
   getOrderStats,
+  getMyOrders,
 };

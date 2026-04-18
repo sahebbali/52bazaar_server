@@ -4,7 +4,7 @@ const router = express.Router();
 
 import orderController from "../../controllers/orderController.js";
 
-router.get("/orders", orderController.getAllOrdersAdmin);
+router.get("/get-my-orders", orderController.getMyOrders);
 // router.get("/orders/:id", orderController.getOrderDetails);
 router.post("/place-order", orderController.createOrder);
 
