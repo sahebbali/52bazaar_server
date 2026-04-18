@@ -10,6 +10,17 @@ const imageSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// Review schema for product ratings
+const reviewSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    rating: { type: Number, required: true, min: 0, max: 5 },
+    comment: { type: String },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const productSchema = new mongoose.Schema(
   {
     name: {
@@ -30,6 +41,7 @@ const productSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      required: true, // ✅ Added required
     },
 
     description: {
@@ -42,10 +54,16 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
 
-    // 💰 Pricing
+    // 💰 Pricing (Updated to match your data)
     regularPrice: {
       type: Number,
       required: true,
+      min: 0,
+    },
+
+    originalPrice: {
+      // ✅ NEW: To store original price before discount
+      type: Number,
       min: 0,
     },
 
@@ -63,6 +81,25 @@ const productSchema = new mongoose.Schema(
     cost: {
       type: Number,
       min: 0,
+    },
+
+    // ⭐ Ratings & Reviews (✅ NEW)
+    rating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+
+    reviews: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    reviewDetails: {
+      type: [reviewSchema],
+      default: [],
     },
 
     // 📦 Inventory
@@ -97,10 +134,16 @@ const productSchema = new mongoose.Schema(
       default: [],
     },
 
-    // 🖼️ Images (MULTIPLE)
+    // 🖼️ Images (Updated to handle single image URL)
     images: {
       type: [imageSchema],
       default: [],
+    },
+
+    // ✅ NEW: Direct image URL field for simpler storage
+    imageUrl: {
+      type: String,
+      trim: true,
     },
 
     // 🔍 SEO
@@ -119,10 +162,12 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
     notes: {
       type: String,
       trim: true,
     },
+
     reason: {
       type: [],
       trim: true,
@@ -138,7 +183,8 @@ const productSchema = new mongoose.Schema(
 productSchema.index({ name: "text", description: "text" });
 productSchema.index({ category: 1 });
 productSchema.index({ is_active: 1 });
-productSchema.index({ price: 1 });
+productSchema.index({ regularPrice: 1 });
+productSchema.index({ rating: -1 }); // ✅ For sorting by rating
 
 const Product = mongoose.model("Product", productSchema);
 

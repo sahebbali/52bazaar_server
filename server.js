@@ -6,15 +6,13 @@ import path from "path";
 import cors from "cors";
 import { fileURLToPath } from "url";
 import { connA } from "./db-config/db-conn.js";
-
 import authRoute from "./routes/auth.js";
-// import categoryRoute from "./routes/category.js";
-// import productRoute from "./routes/product.js";
-// import orderRoute from "./routes/order.js";
+import publicRoute from "./routes/public.js";
 import userRoute from "./routes/userRoutes.js";
 import adminRoute from "./routes/admin/index.js";
 import userProtectedRoute from "./routes/user/index.js";
 import { initCloudinary } from "./utils/cloudinary.js";
+import { seedCategories } from "./seed/seedCategory.js";
 
 const app = express();
 
@@ -69,19 +67,21 @@ app.use(async (req, res, next) => {
 // Routes
 app.get("/api/warmup", (req, res) => res.send("Warmed up ☕"));
 app.use("/api", authRoute);
-// app.use("/api", categoryRoute);
-// app.use("/api", productRoute);
-// app.use("/api", orderRoute);
+app.use("/api/public", publicRoute);
+
 app.use("/api", userRoute);
 app.use("/api/admin", adminRoute);
 app.use("/api/user", userProtectedRoute);
 
-app.all("*", (req, res) => {
-  res.status(404).json({ message: "API route not found", path: req.path });
-});
-
 app.get("/api", (req, res) => {
   res.json("API established");
+});
+app.get("/seed", async (req, res) => {
+  await seedCategories();
+  res.json({ message: "Categories seeded successfully" });
+});
+app.all("*", (req, res) => {
+  res.status(404).json({ message: "API route not found", path: req.path });
 });
 
 // Error handler

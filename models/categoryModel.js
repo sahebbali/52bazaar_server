@@ -54,6 +54,7 @@ const categorySchema = new Schema(
       type: String,
       maxlength: 160,
     },
+    subcategories: [],
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
