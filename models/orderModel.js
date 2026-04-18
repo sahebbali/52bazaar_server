@@ -107,6 +107,16 @@ const orderSchema = new mongoose.Schema(
       transactionId: String,
       paymentDate: Date,
     },
+    shippingAddress: [
+      {
+        street: String,
+        city: String,
+        state: String,
+        postalCode: String,
+        country: String,
+        zipCode: String,
+      },
+    ],
     timeline: [timelineSchema],
     notes: String,
     createdAt: {

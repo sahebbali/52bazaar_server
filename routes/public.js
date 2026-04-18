@@ -6,4 +6,6 @@ import publicController from "../controllers/publicController.js";
 // router.get("/products", publicController.getProducts);
 router.get("/get-all-categories", publicController.getAllCategories);
 
+router.get("/get-all-products", publicController.getAllProducts);
+
 export default router;

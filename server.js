@@ -13,6 +13,7 @@ import adminRoute from "./routes/admin/index.js";
 import userProtectedRoute from "./routes/user/index.js";
 import { initCloudinary } from "./utils/cloudinary.js";
 import { seedCategories } from "./seed/seedCategory.js";
+import seedProducts from "./seed/seedProduct.js";
 
 const app = express();
 
@@ -77,7 +78,8 @@ app.get("/api", (req, res) => {
   res.json("API established");
 });
 app.get("/seed", async (req, res) => {
-  await seedCategories();
+  // await seedCategories();
+  await seedProducts();
   res.json({ message: "Categories seeded successfully" });
 });
 app.all("*", (req, res) => {

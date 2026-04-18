@@ -92,7 +92,7 @@ const createOrder = async (req, res) => {
     }
 
     console.log("Requester email from token:", requester); // Debug log
-    const { items, shipping, payment, notes } = req.body;
+    const { items, shipping, shippingAddress, payment, notes } = req.body;
 
     const customer = {
       name: currentCustomer.name,
@@ -118,8 +118,8 @@ const createOrder = async (req, res) => {
     for (let item of items) {
       // Find product by SKU or ID
       let product;
-      if (item.productId) {
-        product = await Product.findById(item.productId);
+      if (item.name) {
+        product = await Product.findOne({ name: item.name });
       } else if (item.sku) {
         product = await Product.findOne({ sku: item.sku });
       }
@@ -127,7 +127,7 @@ const createOrder = async (req, res) => {
       if (!product) {
         return res.status(400).json({
           success: false,
-          message: `Product with SKU ${item.sku || item.productId} not found`,
+          message: `Product with SKU ${item.sku || item.name} not found`,
         });
       }
 
@@ -164,7 +164,7 @@ const createOrder = async (req, res) => {
         product: product._id,
         name: product.name,
         image: product.images[0].url,
-        sku: product.sku,
+        sku: product.sku || product.slug,
         quantity: requestedQuantity,
         price: price,
         originalPrice: product.regularPrice,
@@ -194,10 +194,7 @@ const createOrder = async (req, res) => {
 
     // Generate unique order ID
     const orderCount = await Order.countDocuments();
-    const orderId = `ORD-${Date.now()}-${String(orderCount + 1).padStart(
-      4,
-      "0",
-    )}`;
+    const orderId = `ORD-${String(orderCount + 1).padStart(4, "0")}`;
 
     // Create order
     const order = new Order({
@@ -212,6 +209,7 @@ const createOrder = async (req, res) => {
       itemsCount,
       subtotal: parseFloat(subtotal.toFixed(2)),
       shipping: parseFloat((shipping || 0).toFixed(2)),
+      shippingAddress: shippingAddress || [],
       tax: parseFloat(tax.toFixed(2)),
       total: parseFloat(total.toFixed(2)),
       payment: {
