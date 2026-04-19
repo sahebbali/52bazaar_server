@@ -72,5 +72,55 @@ const login = async (req, res) => {
     });
   }
 };
+const forgetPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    // console.log(req.body);
 
-export default { login };
+    // 🔹 Validation
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email are required",
+      });
+    }
+
+    // 🔹 Find user
+    const user = await User.findOne({ email }).select("+password");
+    // console.log("User found:", user);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email",
+      });
+    }
+
+    // 🔹 Generate token
+    const token = jwt.sign(
+      {
+        id: user._id,
+        email: user.email,
+      },
+      process.env.JWT_SECRET_KEY,
+      { expiresIn: "1d" },
+    );
+
+    console.log({ token });
+
+    return res.status(200).json({
+      success: true,
+      message: "Email Send successful",
+      token,
+    });
+  } catch (error) {
+    console.error("Login Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
+
+export default { login, forgetPassword };
