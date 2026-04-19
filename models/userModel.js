@@ -70,6 +70,7 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    token: String,
     wishlist: [
       {
         type: mongoose.Schema.Types.ObjectId,

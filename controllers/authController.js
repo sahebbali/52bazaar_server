@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import User from "../models/userModel.js";
+import { sendForgetPasswordEmail } from "../email/sendForgetPasswordEmail.js";
+import { verify_jwt } from "../utils/generateToken.js";
 
 const setCors = (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
@@ -105,7 +107,7 @@ const forgetPassword = async (req, res) => {
       process.env.JWT_SECRET_KEY,
       { expiresIn: "1d" },
     );
-
+    await sendForgetPasswordEmail(user.email, user.name, token);
     console.log({ token });
 
     return res.status(200).json({
@@ -123,4 +125,79 @@ const forgetPassword = async (req, res) => {
   }
 };
 
-export default { login, forgetPassword };
+const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { newPassword, confirmPassword } = req.body;
+    const decoded = verify_jwt(token);
+    // console.log("Decoded token:", decoded);
+
+    if (!decoded.status) {
+      return res.status(400).json({
+        success: false,
+        message: decoded.message,
+      });
+    }
+    const email = decoded.data.email;
+
+    // Validation
+    if (!newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide password and confirm password",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    // Hash the received token
+
+    // Find user with valid token
+    const user = await User.findOne({
+      email,
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset token",
+      });
+    }
+
+    // Update password
+    user.password = newPassword;
+    user.token = token;
+
+    await user.save();
+
+    // Send confirmation email
+    // await sendPasswordChangeConfirmation(user.email, user.name);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Password reset successful. You can now login with your new password.",
+    });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reset password. Please try again.",
+    });
+  }
+};
+
+export default { login, forgetPassword, resetPassword };
