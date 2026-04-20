@@ -165,7 +165,9 @@ export const createProduct = async (req, res) => {
     const product = await Product.create({ ...body, images: uploadedImages });
     await product.populate("category", "name slug");
 
-    res.status(201).json({ success: true, data: product });
+    res
+      .status(201)
+      .json({ success: true, message: "Product created", data: product });
   } catch (err) {
     console.error("Create product error:", err);
     if (err.code === 11000) {

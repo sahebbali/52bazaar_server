@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
+import dns from "dns";
 import path from "path";
 import cors from "cors";
 import { fileURLToPath } from "url";
@@ -14,12 +15,14 @@ import userProtectedRoute from "./routes/user/index.js";
 import { initCloudinary } from "./utils/cloudinary.js";
 import { seedCategories } from "./seed/seedCategory.js";
 import seedProducts from "./seed/seedProduct.js";
+import connectDB from "./db-config/db.js";
 
 const app = express();
 
 // Handle __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dns.setServers(["8.8.8.8", "1.1.1.1", "0.0.0.0"]);
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -27,6 +30,8 @@ const allowedOrigins = [
   "https://52bazaar.eurovisionbdg.com",
   "https://52-bazaar-frontend.vercel.app",
   "https://five2-bazaar-frontend.onrender.com",
+  "https://52bazaars.netlify.app",
+  "https://52bazaar-admin.netlify.app",
 ];
 
 const corsOptions = {
@@ -42,7 +47,7 @@ const corsOptions = {
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
-
+// connectDB();
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions), (req, res) => {
   res.sendStatus(200);
@@ -58,6 +63,7 @@ initCloudinary();
 app.use(async (req, res, next) => {
   try {
     await connA();
+
     next();
   } catch (err) {
     console.error("DB connection error middleware:", err);
@@ -76,6 +82,9 @@ app.use("/api/user", userProtectedRoute);
 
 app.get("/api", (req, res) => {
   res.json("API established");
+});
+app.get("/", (req, res) => {
+  res.json("Hello from 52Bazaar API");
 });
 app.get("/seed", async (req, res) => {
   // await seedCategories();
