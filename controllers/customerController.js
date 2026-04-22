@@ -180,58 +180,39 @@ export const createCustomer = async (req, res) => {
     });
   }
 };
-
-// Update customer
 export const updateCustomer = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, phone, status, addresses } = req.body;
+    const { name, phone, status, addresses } = req.body;
 
-    // Check if email is taken by another user
-    if (email) {
-      const existingUser = await User.findOne({
-        email,
-        _id: { $ne: id },
-      });
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: "Email already in use by another customer",
-        });
-      }
-    }
+    console.log("Updating customer with data:", req.body);
 
-    const updateData = {
-      name,
-      email,
-      phone: phone || "",
-      is_active: status === "active",
-      addresses: addresses || [],
-    };
-
-    const updatedCustomer = await User.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    }).select("-password");
-
-    if (!updatedCustomer) {
+    // 1. Check user exists
+    const user = await User.findById(id);
+    if (!user) {
       return res.status(404).json({
         success: false,
-        message: "Customer not found",
+        message: "User not found",
       });
     }
 
-    res.json({
+    // 3. Update fields
+    user.name = name || user.name;
+    user.phone = phone || user.phone;
+    user.is_active = status === "active";
+
+    // 4. Update addresses (replace পুরো array)
+    if (addresses && Array.isArray(addresses)) {
+      user.addresses = addresses;
+    }
+
+    // 5. Save updated user
+    await user.save();
+
+    res.status(200).json({
       success: true,
       message: "Customer updated successfully",
-      data: {
-        id: updatedCustomer._id,
-        name: updatedCustomer.name,
-        email: updatedCustomer.email,
-        phone: updatedCustomer.phone,
-        status: updatedCustomer.is_active ? "active" : "inactive",
-        addresses: updatedCustomer.addresses || [],
-      },
+      data: user,
     });
   } catch (error) {
     console.error("Error updating customer:", error);
@@ -242,6 +223,8 @@ export const updateCustomer = async (req, res) => {
     });
   }
 };
+
+// Update customer
 
 // Update customer status only
 export const updateCustomerStatus = async (req, res) => {
@@ -412,4 +395,5 @@ export default {
   deleteCustomer,
   sendEmailToCustomer,
   getCustomerStats,
+  updateCustomer,
 };
