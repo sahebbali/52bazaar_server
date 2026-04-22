@@ -13,25 +13,14 @@ import {
   toggleStatus,
   updateProduct,
 } from "../../controllers/productController.js";
+import { handleUpload } from "../../utils/uploadMiddleware.js";
 
 const router = express.Router();
 
 // ─── Product CRUD ─────────────────────────────────────────────────────────────
 router.get("/get-all-products", getAllProducts); // GET    /api/products
 router.get("/get-product-by-id/:id", getProduct); // GET    /api/products/:id  (id OR slug)
-router.post(
-  "/add-product",
-  (req, res, next) => {
-    upload.array("images", 20)(req, res, function (err) {
-      if (err) {
-        console.log("route err", err);
-        return res.status(400).json({ message: err.message });
-      }
-      next();
-    });
-  },
-  createProduct,
-);
+router.post("/add-product", handleUpload("images", 20), createProduct);
 router.put(
   "/update-product",
   (req, res, next) => {

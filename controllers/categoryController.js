@@ -8,6 +8,7 @@ const transformCategory = (category) => {
     name: category.name,
     slug: category.slug,
     description: category.description || "",
+    subcategories: category.subcategories || [],
     parent: category.parent_id?.toString() || "",
     status: category.is_active ? "active" : "inactive",
     icon: category.icon || "🗂️",
@@ -27,7 +28,7 @@ const getAllCategories = async (req, res) => {
   try {
     const { includeInactive = false } = req.query;
 
-    const filter = includeInactive === "true" ? {} : { is_active: true };
+    const filter = includeInactive === "true" ? {} : {};
 
     const categories = await Category.find(filter)
       .populate("parent", "name")
@@ -112,7 +113,9 @@ const createCategory = async (req, res) => {
       icon,
       metaTitle,
       metaDesc,
+      subcategories,
     } = req.body;
+    console.log("Received category data:", req.body); // Debug log
 
     // console.log("Received category data:", req.body); // Debug log
 
@@ -123,7 +126,13 @@ const createCategory = async (req, res) => {
         .status(400)
         .json({ error: "Category with this name already exists" });
     }
-
+    const uploadedImages = (req.files || []).map((file, idx) => ({
+      url: file.path, // Cloudinary secure URL
+      publicId: file.filename, // Cloudinary public_id
+      isFeatured: idx === 0, // first upload is featured by default
+      order: idx,
+    }));
+    console.log("Uploaded images:", uploadedImages); // Debug log
     // Check if slug is unique
     if (slug) {
       const existingSlug = await Category.findOne({ slug });
@@ -143,6 +152,9 @@ const createCategory = async (req, res) => {
         return res.status(400).json({ error: "Parent category not found" });
       }
     }
+    const iconValue = uploadedImages.length
+      ? uploadedImages[0].url
+      : icon || "🗂️";
 
     const category = await Category.create({
       name,
@@ -150,9 +162,10 @@ const createCategory = async (req, res) => {
       description: description || "",
       parent_id: parent || null,
       is_active: status === "active",
-      icon: icon || "🗂️",
+      icon: iconValue,
       meta_title: metaTitle || "",
       meta_description: metaDesc || "",
+      subcategories: subcategories || [],
     });
 
     res.status(201).json({

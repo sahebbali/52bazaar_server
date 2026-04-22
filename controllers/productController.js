@@ -162,7 +162,11 @@ export const createProduct = async (req, res) => {
       order: idx,
     }));
 
-    const product = await Product.create({ ...body, images: uploadedImages });
+    const product = await Product.create({
+      ...body,
+      images: uploadedImages,
+      imageUrl: uploadedImages[0]?.url,
+    });
     await product.populate("category", "name slug");
 
     res
@@ -205,7 +209,7 @@ export const updateProduct = async (req, res) => {
     // ✅ Convert numeric fields
     const numberFields = [
       "regularPrice",
-      "salePrice",
+      "originalPrice",
       "cost",
       "stockQuantity",
       "lowStockThreshold",
@@ -223,11 +227,11 @@ export const updateProduct = async (req, res) => {
     console.log("Final update body after processing:", body);
 
     if (
-      body.salePrice !== undefined &&
+      body.originalPrice !== undefined &&
       body.regularPrice !== undefined &&
-      body.salePrice >= body.regularPrice
+      body.originalPrice >= body.regularPrice
     ) {
-      console.log("Sale price must be less than regular price");
+      console.log("Original price must be less than regular price");
       return res.status(400).json({
         success: false,
         message: "Sale price must be less than regular price",
@@ -264,6 +268,7 @@ export const updateProduct = async (req, res) => {
  */
 export const deleteProduct = async (req, res) => {
   try {
+    // console.log("Deleting product with id:", req.params.id);
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product)
       return res
@@ -271,9 +276,9 @@ export const deleteProduct = async (req, res) => {
         .json({ success: false, message: "Product not found" });
 
     // Remove all images from Cloudinary
-    // await Promise.all(
-    //   product.images.map((img) => deleteFromCloudinary(img.publicId)),
-    // );
+    await Promise.all(
+      product.images.map((img) => deleteFromCloudinary(img.publicId)),
+    );
 
     res
       .status(200)

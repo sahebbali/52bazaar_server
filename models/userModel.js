@@ -35,10 +35,6 @@ const userSchema = new mongoose.Schema(
         name: String,
         phone: {
           type: String,
-          validate: {
-            validator: (v) => /^[0-9]{10,15}$/.test(v),
-            message: (props) => `${props.value} is not a valid phone number!`,
-          },
         },
         street: String,
         city: String,
@@ -67,6 +63,10 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
     smsAlerts: {
+      type: Boolean,
+      default: false,
+    },
+    isBlock: {
       type: Boolean,
       default: false,
     },

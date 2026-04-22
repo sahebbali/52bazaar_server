@@ -2,6 +2,7 @@ import User from "../models/userModel.js";
 
 // Get all customers (with pagination, filtering, sorting)
 export const getAllCustomers = async (req, res) => {
+  // console.log("hello customer");
   try {
     const {
       page = 1,
@@ -11,6 +12,7 @@ export const getAllCustomers = async (req, res) => {
       sortBy = "createdAt",
       sortOrder = "desc",
     } = req.query;
+    // console.log(req.query);
 
     // Build filter
     const filter = { role: "user" }; // Only get regular users as customers
@@ -24,8 +26,14 @@ export const getAllCustomers = async (req, res) => {
     }
 
     // Filter by status
-    if (status !== undefined) {
-      filter.is_active = status === "active";
+    if (status === "active") {
+      filter.is_active = true;
+    }
+    if (status === "inactive") {
+      filter.is_active = false;
+    }
+    if (status === "blocked") {
+      filter.isBlock = true;
     }
 
     // Calculate pagination
@@ -148,30 +156,20 @@ export const createCustomer = async (req, res) => {
       name,
       email,
       phone: phone || "",
-      password: addresses[0].phone || "111111", // Will be hashed by pre-save middleware
+      password: phone || "111111", // Will be hashed by pre-save middleware
       is_active: status === "active",
       role: "user",
       addresses: addresses || [],
+      likeMedia: "system",
     });
 
     await newCustomer.save();
 
     // Don't send password back to client
-    const customerResponse = newCustomer.toObject();
-    delete customerResponse.password;
 
     res.status(201).json({
       success: true,
       message: "Customer created successfully",
-      data: {
-        id: customerResponse._id,
-        name: customerResponse.name,
-        email: customerResponse.email,
-        phone: customerResponse.phone,
-        status: customerResponse.is_active ? "active" : "inactive",
-        joinedDate: customerResponse.createdAt.toISOString().split("T")[0],
-        addresses: customerResponse.addresses || [],
-      },
     });
   } catch (error) {
     console.error("Error creating customer:", error);

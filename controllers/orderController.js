@@ -139,10 +139,10 @@ const createOrder = async (req, res) => {
         });
       }
 
-      // Get the price (use salePrice if available, otherwise regularPrice)
+      // Get the price (use originalPrice if available, otherwise regularPrice)
       const price =
-        product.salePrice && product.salePrice < product.regularPrice
-          ? product.salePrice
+        product.originalPrice && product.originalPrice < product.regularPrice
+          ? product.originalPrice
           : product.regularPrice;
 
       // Check stock availability
@@ -168,8 +168,8 @@ const createOrder = async (req, res) => {
         quantity: requestedQuantity,
         price: price,
         originalPrice: product.regularPrice,
-        discount: product.salePrice
-          ? product.regularPrice - product.salePrice
+        discount: product.originalPrice
+          ? product.regularPrice - product.originalPrice
           : 0,
       });
 
@@ -235,7 +235,7 @@ const createOrder = async (req, res) => {
     // Populate product details for response
     const populatedOrder = await Order.findById(order._id).populate(
       "items.product",
-      "name sku regularPrice salePrice images",
+      "name sku regularPrice originalPrice images",
     );
 
     res.status(201).json({

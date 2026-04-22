@@ -67,17 +67,6 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
 
-    salePrice: {
-      type: Number,
-      min: 0,
-      validate: {
-        validator: function (value) {
-          return !value || value <= this.regularPrice;
-        },
-        message: "Sale price must be less than regular price",
-      },
-    },
-
     cost: {
       type: Number,
       min: 0,
