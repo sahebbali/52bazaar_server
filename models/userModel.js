@@ -77,6 +77,14 @@ const userSchema = new mongoose.Schema(
         ref: "Product",
       },
     ],
+    totalOrders: {
+      type: Number,
+      default: 0,
+    },
+    complectedOrders: {
+      type: Number,
+      default: 0,
+    },
     role: {
       type: String,
       enum: ["user", "admin"],

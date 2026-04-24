@@ -191,6 +191,8 @@ export const updateUser = async (req, res) => {
   try {
     console.log("Update User Request Body:", req.body);
     const requester = req.auth.email;
+    console.log("Requester Email:", requester);
+    console.log("body:", req.body);
     const user = await User.findOne({ email: requester });
     if (!user) return res.status(404).json({ message: "User not found" });
     const updatedUser = await User.findOneAndUpdate(

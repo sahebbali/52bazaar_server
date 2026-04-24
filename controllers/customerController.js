@@ -185,7 +185,7 @@ export const updateCustomer = async (req, res) => {
     const { id } = req.params;
     const { name, phone, status, addresses } = req.body;
 
-    console.log("Updating customer with data:", req.body);
+    // console.log("Updating customer with data:", req.body);
 
     // 1. Check user exists
     const user = await User.findById(id);

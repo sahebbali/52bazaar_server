@@ -52,7 +52,7 @@ const login = async (req, res) => {
         email: user.email,
       },
       process.env.JWT_SECRET_KEY,
-      { expiresIn: "1d" },
+      { expiresIn: "7d" },
     );
 
     // 🔹 Remove password
@@ -105,7 +105,7 @@ const forgetPassword = async (req, res) => {
         email: user.email,
       },
       process.env.JWT_SECRET_KEY,
-      { expiresIn: "1d" },
+      { expiresIn: "7d" },
     );
     await sendForgetPasswordEmail(user.email, user.name, token);
     console.log({ token });

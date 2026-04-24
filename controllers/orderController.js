@@ -1,6 +1,7 @@
 import Order from "../models/orderModel.js";
 import Product from "../models/productModel.js";
 import User from "../models/userModel.js";
+import { updateStockQuantity, updateUserTotalOrder } from "../utils/index.js";
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -232,6 +233,13 @@ const createOrder = async (req, res) => {
 
     await order.save();
 
+    await User.findOneAndUpdate(
+      { email: customer.email },
+      {
+        $inc: { totalOrders: itemsCount },
+      },
+    );
+
     // Populate product details for response
     const populatedOrder = await Order.findById(order._id).populate(
       "items.product",
@@ -271,6 +279,21 @@ const updateOrderStatus = async (req, res) => {
     }
 
     order.status = status;
+    if (status === "delivered") {
+      // 1) Update user totals
+      await updateUserTotalOrder(order.customer.email, 1);
+
+      // 2) Update all ordered products in parallel
+      await Promise.all(
+        order.items.map(async (item) => {
+          await updateStockQuantity(
+            item.product, // use ObjectId or product id
+            item.quantity,
+            "minus",
+          );
+        }),
+      );
+    }
     if (note) {
       order.timeline.push({ status, note });
     }

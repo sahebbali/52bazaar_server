@@ -6,6 +6,7 @@ import orderRoutes from "./order.js";
 import inventoryRoutes from "./inventory.js";
 import paymentRoutes from "./payment.js";
 import customerRoutes from "./customer.js";
+import settingRoutes from "./setting.js";
 
 const router = express.Router();
 const middleware = [verifyJWT, verifyAdmin];
@@ -16,5 +17,5 @@ router.use(orderRoutes);
 router.use(productRoutes);
 router.use(paymentRoutes);
 router.use(customerRoutes);
-
+router.use(settingRoutes);
 export default router;
