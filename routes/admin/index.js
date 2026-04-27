@@ -7,6 +7,7 @@ import inventoryRoutes from "./inventory.js";
 import paymentRoutes from "./payment.js";
 import customerRoutes from "./customer.js";
 import settingRoutes from "./setting.js";
+import couponRoutes from "./coupon.js";
 
 const router = express.Router();
 const middleware = [verifyJWT, verifyAdmin];
@@ -18,4 +19,5 @@ router.use(productRoutes);
 router.use(paymentRoutes);
 router.use(customerRoutes);
 router.use(settingRoutes);
+router.use(couponRoutes);
 export default router;
