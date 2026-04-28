@@ -157,10 +157,8 @@ couponSchema.virtual("isValid").get(function () {
 });
 
 // Method to check if coupon can be used by user
-couponSchema.methods.canBeUsedByUser = function (userId) {
-  const userUsage = this.usedBy.filter(
-    (usage) => usage.user.toString() === userId.toString(),
-  );
+couponSchema.methods.canBeUsedByUser = function (email) {
+  const userUsage = this.usedBy.filter((usage) => usage.user === email);
   return userUsage.length < this.userLimit;
 };
 
@@ -184,7 +182,7 @@ couponSchema.methods.applyCoupon = async function (
 couponSchema.statics.calculateDiscount = async function (
   couponCode,
   cartTotal,
-  userId,
+  email,
 ) {
   const coupon = await this.findOne({ code: couponCode.toUpperCase() });
 
@@ -192,15 +190,15 @@ couponSchema.statics.calculateDiscount = async function (
     throw new Error("Invalid coupon code");
   }
 
-  if (!coupon.isValid) {
-    throw new Error("Coupon is not valid");
-  }
+  // if (!coupon.isValid) {
+  //   throw new Error("Coupon is not valid");
+  // }
 
   if (cartTotal < coupon.minPurchase) {
-    throw new Error(`Minimum purchase of $${coupon.minPurchase} required`);
+    throw new Error(`Minimum purchase of ৳${coupon.minPurchase} required`);
   }
 
-  if (!coupon.canBeUsedByUser(userId)) {
+  if (!coupon.canBeUsedByUser(email)) {
     throw new Error("You have reached the usage limit for this coupon");
   }
 

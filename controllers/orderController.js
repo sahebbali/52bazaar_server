@@ -1,7 +1,12 @@
 import Order from "../models/orderModel.js";
+import Coupon from "../models/couponModel.js";
 import Product from "../models/productModel.js";
 import User from "../models/userModel.js";
-import { updateStockQuantity, updateUserTotalOrder } from "../utils/index.js";
+import {
+  updateStockQuantity,
+  updateUserAddress,
+  updateUserTotalOrder,
+} from "../utils/index.js";
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -92,8 +97,9 @@ const createOrder = async (req, res) => {
       });
     }
 
-    console.log("Requester email from token:", requester); // Debug log
-    const { items, shipping, shippingAddress, payment, notes } = req.body;
+    console.log("Requester email from token:", requester);
+    const { items, shipping, shippingAddress, payment, notes, coupon } =
+      req.body;
 
     const customer = {
       name: currentCustomer.name,
@@ -117,18 +123,22 @@ const createOrder = async (req, res) => {
     const orderItems = [];
 
     for (let item of items) {
-      // Find product by SKU or ID
+      // Find product by SKU or ID or name
       let product;
-      if (item.name) {
+      if (item.product) {
+        product = await Product.findById(item.product);
+      } else if (item.name) {
         product = await Product.findOne({ name: item.name });
-      } else if (item.sku) {
-        product = await Product.findOne({ sku: item.sku });
+      } else if (item.slug) {
+        product = await Product.findOne({ slug: item.slug });
       }
 
       if (!product) {
         return res.status(400).json({
           success: false,
-          message: `Product with SKU ${item.sku || item.name} not found`,
+          message: `Product with ${
+            item.sku || item.name || item.product
+          } not found`,
         });
       }
 
@@ -164,7 +174,7 @@ const createOrder = async (req, res) => {
       orderItems.push({
         product: product._id,
         name: product.name,
-        image: product.images[0].url,
+        image: product.images[0]?.url || product.imageUrl,
         sku: product.sku || product.slug,
         quantity: requestedQuantity,
         price: price,
@@ -182,16 +192,85 @@ const createOrder = async (req, res) => {
         console.log(
           `Low stock alert: ${product.name} has only ${product.stockQuantity} units left`,
         );
-        // You can trigger email notification here
       }
 
       await product.save();
     }
 
     // Calculate taxes and totals
-    const taxRate = 0.1; // 10% tax - make this configurable
+    const taxRate = 0.08; // 8% tax - changed to match frontend
     const tax = subtotal * taxRate;
-    const total = subtotal + (shipping || 0) + tax;
+    let total = subtotal + (shipping || 0) + tax;
+    let discountAmount = 0;
+    let appliedCoupon = null;
+
+    // Apply coupon if provided
+    if (coupon && coupon.code) {
+      try {
+        const validCoupon = await Coupon.findOne({
+          code: coupon.code.toUpperCase(),
+          isActive: true,
+          startDate: { $lte: new Date() },
+          endDate: { $gte: new Date() },
+        });
+
+        if (validCoupon) {
+          // Check minimum purchase requirement
+          if (subtotal >= validCoupon.minPurchase) {
+            // Check usage limit
+            if (
+              validCoupon.usageLimit === 0 ||
+              validCoupon.usedCount < validCoupon.usageLimit
+            ) {
+              // Check if user has already used this coupon
+              const userCouponUsage = validCoupon.usedBy?.some(
+                (u) => u.userEmail === currentCustomer.email,
+              );
+
+              if (!userCouponUsage || validCoupon.userLimit > 1) {
+                // Calculate discount
+                if (validCoupon.discountType === "percentage") {
+                  discountAmount = (subtotal * validCoupon.discountValue) / 100;
+                  // Cap discount at subtotal
+                  discountAmount = Math.min(discountAmount, subtotal);
+                } else if (validCoupon.discountType === "fixed") {
+                  discountAmount = validCoupon.discountValue;
+                  // Cap discount at subtotal
+                  discountAmount = Math.min(discountAmount, subtotal);
+                }
+
+                // Update total after discount
+                total = total - discountAmount;
+
+                // Track coupon usage
+                await Coupon.findByIdAndUpdate(validCoupon._id, {
+                  $inc: { usedCount: 1 },
+                  $push: {
+                    usedBy: {
+                      userId: currentCustomer._id,
+                      userEmail: currentCustomer.email,
+                      usedAt: new Date(),
+                      orderAmount: subtotal,
+                      discountAmount: discountAmount,
+                    },
+                  },
+                });
+
+                appliedCoupon = {
+                  code: validCoupon.code,
+                  discountType: validCoupon.discountType,
+                  discountValue: validCoupon.discountValue,
+                  discountAmount: parseFloat(discountAmount.toFixed(2)),
+                };
+              }
+            }
+          }
+        }
+      } catch (couponError) {
+        console.error("Error applying coupon:", couponError);
+        // Don't fail the order if coupon is invalid, just proceed without discount
+      }
+    }
 
     // Generate unique order ID
     const orderCount = await Order.countDocuments();
@@ -212,11 +291,14 @@ const createOrder = async (req, res) => {
       shipping: parseFloat((shipping || 0).toFixed(2)),
       shippingAddress: shippingAddress || [],
       tax: parseFloat(tax.toFixed(2)),
+      discount: appliedCoupon ? parseFloat(discountAmount.toFixed(2)) : 0,
+      coupons: appliedCoupon ? [appliedCoupon] : [],
       total: parseFloat(total.toFixed(2)),
       payment: {
         method: payment?.method || "pending",
         transactionId: payment?.transactionId || null,
-        paymentDate: payment?.method === "credit_card" ? new Date() : null,
+        paymentDate: new Date(),
+        bkashNumber: payment?.bkashNumber || null,
       },
       paymentStatus:
         payment?.method === "cash_on_delivery" ? "pending" : "paid",
@@ -226,30 +308,46 @@ const createOrder = async (req, res) => {
         {
           status: "pending",
           date: new Date(),
-          note: "Order created successfully",
+          note: `Order created successfully${
+            appliedCoupon ? ` with coupon ${appliedCoupon.code}` : ""
+          }`,
         },
       ],
     });
 
     await order.save();
 
+    // Update user's total orders
     await User.findOneAndUpdate(
       { email: customer.email },
       {
         $inc: { totalOrders: itemsCount },
       },
     );
+    if (currentCustomer.addresses.length === 0 && shippingAddress) {
+      await updateUserAddress(customer.email, shippingAddress);
+    }
 
     // Populate product details for response
-    const populatedOrder = await Order.findById(order._id).populate(
-      "items.product",
-      "name sku regularPrice originalPrice images",
-    );
+    const populatedOrder = await Order.findById(order._id)
+      .populate("items.product", "name sku regularPrice originalPrice images")
+      .populate("coupons");
 
     res.status(201).json({
       success: true,
-      message: "Order created successfully",
+      message: appliedCoupon
+        ? `Order created successfully! You saved ৳${discountAmount.toFixed(
+            2,
+          )} with coupon ${appliedCoupon.code}`
+        : "Order created successfully",
       order: populatedOrder,
+      discount: appliedCoupon
+        ? {
+            amount: discountAmount,
+            code: appliedCoupon.code,
+            savedAmount: discountAmount,
+          }
+        : null,
     });
   } catch (error) {
     console.error("Error creating order:", error);
@@ -259,7 +357,6 @@ const createOrder = async (req, res) => {
     });
   }
 };
-
 // @desc    Update order status
 // @route   PUT /api/orders/:id/status
 // @access  Private
@@ -502,6 +599,65 @@ const getMyOrders = async (req, res) => {
   }
 };
 
+const cancelOrder = async (req, res) => {
+  try {
+    const order = await Order.findOne({ orderId: req.params.id });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // Prevent cancel if already delivered
+    if (order.status === "delivered") {
+      return res.status(400).json({
+        success: false,
+        message: "Delivered orders cannot be cancelled",
+      });
+    }
+
+    // Prevent duplicate cancel
+    if (order.status === "cancelled") {
+      return res.status(400).json({
+        success: false,
+        message: "Order already cancelled",
+      });
+    }
+
+    // Update order
+    order.status = "cancelled";
+
+    // Optional payment status change
+    if (order.paymentStatus === "paid") {
+      order.paymentStatus = "refunded";
+    } else {
+      order.paymentStatus = "cancelled";
+    }
+
+    // Add timeline history
+    order.timeline.push({
+      status: "cancelled",
+      date: new Date(),
+      note: "Order cancelled successfully",
+    });
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: "Order cancelled successfully",
+      order,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export default {
   getAllOrdersAdmin,
   getOrderById,
@@ -512,4 +668,5 @@ export default {
   deleteOrder,
   getOrderStats,
   getMyOrders,
+  cancelOrder,
 };

@@ -102,10 +102,11 @@ const orderSchema = new mongoose.Schema(
     payment: {
       method: {
         type: String,
-        enum: ["nagad", "bkash", "bank_transfer", "cash_on_delivery"],
+        enum: ["bkash", "cash_on_delivery"],
       },
       transactionId: String,
       paymentDate: Date,
+      bkashNumber: String,
     },
     shippingAddress: [
       {
@@ -119,6 +120,37 @@ const orderSchema = new mongoose.Schema(
     ],
     timeline: [timelineSchema],
     notes: String,
+    discount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    coupons: [
+      {
+        code: {
+          type: String,
+          required: true,
+        },
+        discountType: {
+          type: String,
+          enum: ["percentage", "fixed"],
+          required: true,
+        },
+        discountValue: {
+          type: Number,
+          required: true,
+        },
+        discountAmount: {
+          type: Number,
+          required: true,
+        },
+        appliedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     createdAt: {
       type: Date,
       default: Date.now,

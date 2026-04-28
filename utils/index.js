@@ -26,6 +26,30 @@ export const updateUserTotalOrder = async (email, count = 1) => {
     throw error;
   }
 };
+export const updateUserAddress = async (email, shippingAddress) => {
+  console.log("Updating user address for:", email);
+  try {
+    const updatedUser = await User.findOneAndUpdate(
+      { email },
+      {
+        $push: {
+          addresses: shippingAddress,
+        },
+      },
+      { new: true },
+    );
+
+    if (!updatedUser) {
+      console.log("User not found");
+      return null;
+    }
+
+    return updatedUser;
+  } catch (error) {
+    console.error("Update user order error:", error.message);
+    throw error;
+  }
+};
 
 // Update Product Stock
 export const updateStockQuantity = async (id, count = 1, type = "minus") => {
@@ -58,4 +82,5 @@ export const updateStockQuantity = async (id, count = 1, type = "minus") => {
 export default {
   updateUserTotalOrder,
   updateStockQuantity,
+  updateUserAddress,
 };

@@ -265,7 +265,8 @@ const toggleCouponStatus = async (req, res) => {
 const validateCoupon = async (req, res) => {
   try {
     const { couponCode, cartTotal } = req.body;
-    const userId = req.user.id;
+    console.log("Validating coupon:", couponCode, "for cart total:", cartTotal);
+    const requester = req.auth?.email;
 
     if (!couponCode) {
       return res.status(400).json({
@@ -284,7 +285,7 @@ const validateCoupon = async (req, res) => {
     const result = await Coupon.calculateDiscount(
       couponCode,
       cartTotal,
-      userId,
+      requester,
     );
 
     res.status(200).json({
@@ -300,12 +301,13 @@ const validateCoupon = async (req, res) => {
         },
         discount: result.discount,
         newTotal: result.newTotal,
-        message: `Coupon applied successfully! You saved $${result.discount.toFixed(
+        message: `Coupon applied successfully! You saved ৳${result.discount.toFixed(
           2,
         )}`,
       },
     });
   } catch (error) {
+    console.log("Error validating coupon:", error);
     res.status(400).json({
       success: false,
       message: error.message,
@@ -399,7 +401,51 @@ const applyCouponToOrder = async (req, res) => {
     });
   }
 };
+const getValidCoupons = async (req, res) => {
+  try {
+    const now = new Date();
 
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    let query = {
+      isActive: true,
+      startDate: { $lte: now }, // already started
+      endDate: { $gte: now }, // not expired
+    };
+
+    // Search by coupon code
+    if (req.query.search) {
+      query.code = { $regex: req.query.search, $options: "i" };
+    }
+
+    const coupons = await Coupon.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("createdBy", "name email");
+
+    const total = await Coupon.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      message: "Valid coupons fetched successfully",
+      data: coupons,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 export default {
   createCoupon,
   getAllCoupons,
@@ -410,4 +456,5 @@ export default {
   validateCoupon,
   getCouponStats,
   applyCouponToOrder,
+  getValidCoupons,
 };
