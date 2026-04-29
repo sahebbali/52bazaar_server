@@ -24,5 +24,7 @@ router.post(
 router.put("/update-category", categoryController.updateCategory);
 router.delete("/delete-category/:id", categoryController.deleteCategory);
 router.patch("/toggle-status/:id", categoryController.toggleStatus);
+router.get("/get-category-stats", categoryController.getCategoryStats);
+router.get("/get-dashboard-data", categoryController.getDashboardData);
 
 export default router;
