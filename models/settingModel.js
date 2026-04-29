@@ -47,77 +47,22 @@ const settingsSchema = new mongoose.Schema(
     },
 
     // bKash Settings
-    bkashNumber: {
-      type: String,
+    bkashNumbers: {
+      type: [String],
       trim: true,
+      default: [],
     },
-    bkashApiKey: {
-      type: String,
-      trim: true,
-    },
-    bkashApiSecret: {
-      type: String,
-      trim: true,
-    },
-    bkashUsername: {
-      type: String,
-      trim: true,
-    },
-    bkashPassword: {
-      type: String,
-      trim: true,
-    },
-    bkashEnvironment: {
-      type: String,
-      enum: ["sandbox", "live"],
-      default: "sandbox",
-    },
-
     // Nagad Settings
-    nagadMerchantId: {
-      type: String,
+    nagadNumbers: {
+      type: [String],
       trim: true,
+      default: [],
     },
-    nagadNumber: {
-      type: String,
-      trim: true,
-    },
-    nagadPublicKey: {
-      type: String,
-      trim: true,
-    },
-    nagadPrivateKey: {
-      type: String,
-      trim: true,
-    },
-    nagadEnvironment: {
-      type: String,
-      enum: ["sandbox", "live"],
-      default: "sandbox",
-    },
-
-    // Upay Settings
-    upayMerchantId: {
-      type: String,
-      trim: true,
-    },
-    upayApiKey: {
-      type: String,
-      trim: true,
-    },
-    upayApiSecret: {
-      type: String,
-      trim: true,
-    },
-
     // Rocket Settings
-    rocketNumber: {
-      type: String,
+    rocketNumbers: {
+      type: [String],
       trim: true,
-    },
-    rocketApiKey: {
-      type: String,
-      trim: true,
+      default: [],
     },
 
     // Additional Payment Methods
@@ -198,10 +143,9 @@ const settingsSchema = new mongoose.Schema(
       default: false,
     },
 
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+    id: {
+      type: String,
+      default: "system-info",
     },
   },
   {

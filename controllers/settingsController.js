@@ -2,43 +2,26 @@ import Settings from "../models/settingModel.js";
 // Get settings
 const getSettings = async (req, res) => {
   try {
-    let settings = await Settings.findOne({ userId: req.userId });
+    const settings = await Settings.findOne({ id: "system-info" }).lean();
 
     if (!settings) {
-      // Create default settings if not exists
-      settings = new Settings({
-        userId: req.userId,
-        storeName: "My Store",
-        storeEmail: "admin@example.com",
-        // ... other default values
+      return res.status(404).json({
+        success: false,
+        message: "Settings not found",
       });
-      await settings.save();
     }
 
-    // Remove sensitive data before sending
-    const settingsObj = settings.toObject();
-    const sensitiveFields = [
-      "bkashApiSecret",
-      "bkashPassword",
-      "nagadPrivateKey",
-      "upayApiSecret",
-      "smtpPassword",
-    ];
-    sensitiveFields.forEach((field) => {
-      if (settingsObj[field]) {
-        settingsObj[field] = "••••••••";
-      }
-    });
-
-    res.json({
+    return res.status(200).json({
       success: true,
-      data: settingsObj,
+      message: "Settings fetched successfully",
+      data: settings,
     });
   } catch (error) {
     console.error("Get settings error:", error);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
-      message: "Error fetching settings",
+      message: "Failed to fetch settings",
       error: error.message,
     });
   }
@@ -186,10 +169,150 @@ const getPaymentStatus = async (req, res) => {
   }
 };
 
+// Create or Update Settings
+export const saveSettings = async (req, res) => {
+  try {
+    console.log("Request body:", req.body);
+
+    let body = req.body;
+
+    // যদি FormData থেকে data আসে string হিসেবে
+    if (typeof body.data === "string") {
+      body = JSON.parse(body.data);
+    }
+
+    // convert numbers array safely
+    ["bkashNumbers", "nagadNumbers", "rocketNumbers"].forEach((key) => {
+      if (typeof body[key] === "string") {
+        try {
+          body[key] = JSON.parse(body[key]);
+        } catch {
+          body[key] = body[key]
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean);
+        }
+      }
+
+      if (!Array.isArray(body[key])) {
+        body[key] = [];
+      }
+    });
+
+    // logo upload
+    if (req.file) {
+      body.storeLogo = req.file.path;
+    }
+
+    let settings = await Settings.findOne({ id: "system-info" });
+
+    if (settings) {
+      // old + new merge multiple numbers
+      body.bkashNumbers = [
+        ...new Set([
+          ...(settings.bkashNumbers || []),
+          ...(body.bkashNumbers || []),
+        ]),
+      ];
+
+      body.nagadNumbers = [
+        ...new Set([
+          ...(settings.nagadNumbers || []),
+          ...(body.nagadNumbers || []),
+        ]),
+      ];
+
+      body.rocketNumbers = [
+        ...new Set([
+          ...(settings.rocketNumbers || []),
+          ...(body.rocketNumbers || []),
+        ]),
+      ];
+
+      settings = await Settings.findOneAndUpdate(
+        { id: "system-info" },
+        { $set: body },
+        { new: true },
+      );
+    } else {
+      settings = await Settings.create({
+        id: "system-info",
+        ...body,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Settings saved successfully",
+      data: settings,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const deleteNumber = async (req, res) => {
+  try {
+    const { number, gateway } = req.body;
+
+    // Validation
+    if (!number || !gateway) {
+      return res.status(400).json({
+        success: false,
+        message: "Number and gateway are required",
+      });
+    }
+
+    // Allowed fields
+    const allowedGateways = ["bkashNumbers", "nagadNumbers", "rocketNumbers"];
+
+    if (!allowedGateways.includes(gateway)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid gateway name",
+      });
+    }
+
+    // Remove number from selected gateway array
+    const updatedSettings = await Settings.findOneAndUpdate(
+      { id: "system-info" },
+      { $pull: { [gateway]: number } },
+      { new: true },
+    );
+
+    if (!updatedSettings) {
+      return res.status(404).json({
+        success: false,
+        message: "Settings not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `${number} deleted from ${gateway} successfully`,
+      data: updatedSettings,
+    });
+  } catch (error) {
+    console.error("Delete number error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+};
+
 export default {
   getSettings,
   updateSettings,
   uploadLogo,
   testSMTP,
   getPaymentStatus,
+  saveSettings,
+  deleteNumber,
 };
