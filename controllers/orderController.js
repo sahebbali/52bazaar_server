@@ -300,8 +300,7 @@ const createOrder = async (req, res) => {
         paymentDate: new Date(),
         bkashNumber: payment?.bkashNumber || null,
       },
-      paymentStatus:
-        payment?.method === "cash_on_delivery" ? "pending" : "paid",
+      paymentStatus: "pending",
       status: "pending",
       notes: notes || "",
       timeline: [

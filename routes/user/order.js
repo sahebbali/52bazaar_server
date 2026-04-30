@@ -4,6 +4,7 @@ const router = express.Router();
 
 import orderController from "../../controllers/orderController.js";
 import couponController from "../../controllers/couponController.js";
+import paymentController from "../../controllers/paymentController.js";
 
 router.get("/get-my-orders", orderController.getMyOrders);
 // router.get("/orders/:id", orderController.getOrderDetails);
@@ -13,12 +14,8 @@ router.put("/cancel-order/:id", orderController.cancelOrder);
 router.put("/validate-coupon", couponController.validateCoupon);
 router.post("/apply-to-order", couponController.applyCouponToOrder);
 router.get("/get-valid-coupons", couponController.getValidCoupons);
+router.get("/get-order-by-id/:id", orderController.getOrderById);
 
-// router.get("/my-orders", authMiddleware, async (req, res) => {
-//   const orders = await Order.find({ user: req.user._id }).populate(
-//     "items.product",
-//   );
-//   res.json(orders);
-// });
+router.post("/submit-bkash-payment", paymentController.submitBkashPayment);
 
 export default router;

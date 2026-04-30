@@ -43,3 +43,15 @@ export const deleteFromCloudinary = async (publicId) => {
   if (!publicId) return;
   await cloudinary.uploader.destroy(publicId);
 };
+
+export const paymentUpload = multer({
+  storage: new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder: "payments",
+      allowed_formats: ["jpg", "jpeg", "png", "webp"],
+      transformation: [{ width: 1000, crop: "limit", quality: "auto" }],
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
