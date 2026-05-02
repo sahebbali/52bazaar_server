@@ -7,6 +7,8 @@ import {
   updateUserAddress,
   updateUserTotalOrder,
 } from "../utils/index.js";
+import { sendOrderStatusMail } from "../email/sendOrderStatusMail.js";
+import { sendOrderConfirmationEmail } from "../email/sendOrderConfirmationEmail.js";
 
 // @desc    Get all orders
 // @route   GET /api/orders
@@ -97,7 +99,7 @@ const createOrder = async (req, res) => {
       });
     }
 
-    console.log("Requester email from token:", requester);
+    // console.log("Requester email from token:", requester);
     const { items, shipping, shippingAddress, payment, notes, coupon } =
       req.body;
 
@@ -327,6 +329,8 @@ const createOrder = async (req, res) => {
       await updateUserAddress(customer.email, shippingAddress);
     }
 
+    await sendOrderConfirmationEmail(order);
+
     // Populate product details for response
     const populatedOrder = await Order.findById(order._id)
       .populate("items.product", "name sku regularPrice originalPrice images")
@@ -366,7 +370,8 @@ const updateOrderStatus = async (req, res) => {
     const order = await Order.findOne({
       $or: [{ orderId: req.params.id }],
     });
-    console.log("Updating order status for ID:", req.params.id, "to", status); // Debug log
+
+    console.log("Updating order status for ID:", req.params.id, "to", status);
 
     if (!order) {
       return res
@@ -374,7 +379,12 @@ const updateOrderStatus = async (req, res) => {
         .json({ success: false, message: "Order not found" });
     }
 
+    // Store old status for comparison
+    const oldStatus = order.status;
+
+    // Update order status
     order.status = status;
+
     if (status === "delivered") {
       // 1) Update user totals
       await updateUserTotalOrder(order.customer.email, 1);
@@ -382,34 +392,51 @@ const updateOrderStatus = async (req, res) => {
       // 2) Update all ordered products in parallel
       await Promise.all(
         order.items.map(async (item) => {
-          await updateStockQuantity(
-            item.product, // use ObjectId or product id
-            item.quantity,
-            "minus",
-          );
+          await updateStockQuantity(item.product, item.quantity, "minus");
         }),
       );
     }
+
+    // Add to timeline
     if (note) {
-      order.timeline.push({ status, note });
+      order.timeline.push({
+        status,
+        note,
+        date: new Date(),
+      });
+    } else {
+      // Add default note if none provided
+      const defaultNote = `Order status updated from ${oldStatus} to ${status}`;
+      order.timeline.push({
+        status,
+        note: defaultNote,
+        date: new Date(),
+      });
     }
 
     await order.save();
 
-    // If sendEmail is true, trigger email notification
-    if (sendEmail) {
-      // Implement email sending logic here
-      console.log(
-        `Email notification sent to ${order.customer.email} about status update to ${status}`,
-      );
+    // Send email notification if requested
+    if (sendEmail === true || sendEmail === "true") {
+      try {
+        await sendOrderStatusMail(order, status, note || null);
+        console.log(
+          `Email notification sent to ${order.customer.email} about status update to ${status}`,
+        );
+      } catch (emailError) {
+        console.error("Failed to send email notification:", emailError);
+        // Don't fail the main request if email fails
+      }
     }
 
     res.json({
       success: true,
       order,
       message: "Order status updated successfully",
+      emailSent: sendEmail ? true : false,
     });
   } catch (error) {
+    console.error("Update order status error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
