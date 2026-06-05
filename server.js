@@ -32,6 +32,8 @@ const allowedOrigins = [
   "https://five2-bazaar-frontend.onrender.com",
   "https://52bazaars.netlify.app",
   "https://52bazaar-admin.netlify.app",
+  "https://admin.52bazaar.com",
+  "https://52bazaar.com",
 ];
 
 const corsOptions = {
