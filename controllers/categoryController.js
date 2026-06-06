@@ -10,19 +10,11 @@ const transformCategory = (category) => {
     id: category._id.toString(),
     name: category.name,
     slug: category.slug,
-    description: category.description || "",
+    // description: category.description || "",
     subcategories: category.subcategories || [],
-    parent: category.parent_id?.toString() || "",
+    parent: category.parent || "",
     status: category.is_active ? "active" : "inactive",
     icon: category.icon || "🗂️",
-    metaTitle: category.meta_title || "",
-    metaDesc: category.meta_description || "",
-    createdAt: category.created_at
-      ? new Date(category.created_at).toLocaleDateString()
-      : new Date().toLocaleDateString(),
-    level: category.level,
-    path: category.path,
-    products: 0, // You can add product count query here if needed
   };
 };
 
@@ -49,7 +41,10 @@ const getAllCategories = async (req, res) => {
 // Get category tree (hierarchical)
 const getCategoryTree = async (req, res) => {
   try {
-    const categories = await Category.find({ is_active: true }).lean();
+    const categories = await Category.find({ is_active: true })
+      .select("-description -status -metaTitle -metaDesc -createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
 
     // Build tree structure
     const categoryMap = {};
@@ -145,16 +140,7 @@ const createCategory = async (req, res) => {
     }
 
     // Validate parent category if provided
-    if (parent) {
-      if (!(Number.isInteger(parent) && parent > 0)) {
-        return res.status(400).json({ error: "Invalid parent category ID" });
-      }
 
-      const parentCategory = await Category.findById(parent);
-      if (!parentCategory) {
-        return res.status(400).json({ error: "Parent category not found" });
-      }
-    }
     const iconValue = uploadedImages.length
       ? uploadedImages[0].url
       : icon || "🗂️";
@@ -163,12 +149,12 @@ const createCategory = async (req, res) => {
       name,
       slug: slug || undefined,
       description: description || "",
-      parent_id: parent || null,
+      parent: parent || null,
       is_active: status === "active",
       icon: iconValue,
       meta_title: metaTitle || "",
       meta_description: metaDesc || "",
-      subcategories: subcategories || [],
+      subcategories: subcategories ? JSON.parse(subcategories) : [],
     });
 
     res.status(201).json({
@@ -190,7 +176,6 @@ const createCategory = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const {
-      id,
       name,
       slug,
       description,
@@ -199,8 +184,11 @@ const updateCategory = async (req, res) => {
       icon,
       metaTitle,
       metaDesc,
+      subcategories,
     } = req.body;
+    const { id } = req.params;
 
+    // console.log("Received update data:", req.body); // Debug log
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ error: "Invalid category ID" });
     }
@@ -257,8 +245,7 @@ const updateCategory = async (req, res) => {
           description !== undefined
             ? description
             : existingCategory.description,
-        parent_id:
-          parent !== undefined ? parent || null : existingCategory.parent_id,
+        parent: parent !== undefined ? parent || null : existingCategory.parent,
         is_active:
           status !== undefined
             ? status === "active"
@@ -268,6 +255,9 @@ const updateCategory = async (req, res) => {
           metaTitle !== undefined ? metaTitle : existingCategory.meta_title,
         meta_description:
           metaDesc !== undefined ? metaDesc : existingCategory.meta_description,
+        subcategories: subcategories
+          ? JSON.parse(subcategories)
+          : existingCategory.subcategories,
       },
       { new: true, runValidators: true },
     )

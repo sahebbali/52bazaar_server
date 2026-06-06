@@ -53,6 +53,9 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    subCategory: {
+      type: String,
+    },
 
     // 💰 Pricing (Updated to match your data)
     regularPrice: {

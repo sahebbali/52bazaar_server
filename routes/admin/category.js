@@ -21,7 +21,19 @@ router.post(
   },
   categoryController.createCategory,
 );
-router.put("/update-category", categoryController.updateCategory);
+router.put(
+  "/update-category/:id",
+  (req, res, next) => {
+    upload.array("images", 20)(req, res, function (err) {
+      if (err) {
+        console.log("route err", err);
+        return res.status(400).json({ message: err.message });
+      }
+      next();
+    });
+  },
+  categoryController.updateCategory,
+);
 router.delete("/delete-category/:id", categoryController.deleteCategory);
 router.patch("/toggle-status/:id", categoryController.toggleStatus);
 router.get("/get-category-stats", categoryController.getCategoryStats);

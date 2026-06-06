@@ -21,9 +21,9 @@ const categorySchema = new Schema(
       type: String,
       default: "🗂️",
     },
-    parent_id: {
-      type: Number,
-      default: null,
+    parent: {
+      type: String,
+      default: "",
     },
     is_active: {
       type: Boolean,
@@ -66,44 +66,12 @@ const categorySchema = new Schema(
 
 // Indexes
 categorySchema.index({ name: "text" });
-categorySchema.index({ is_active: 1, parent_id: 1 });
+categorySchema.index({ is_active: 1 });
 categorySchema.index({ path: 1, is_active: 1 });
 categorySchema.index({ level: 1, is_active: 1 });
 
-// Virtuals
-categorySchema.virtual("children", {
-  ref: "Category",
-  localField: "_id",
-  foreignField: "parent_id",
-  justOne: false,
-});
-
-categorySchema.virtual("parent", {
-  ref: "Category",
-  localField: "parent_id",
-  foreignField: "_id",
-  justOne: true,
-});
-
 // Pre-save hook for hierarchy management
 categorySchema.pre("save", async function (next) {
-  if (this.isModified("parent_id")) {
-    if (this.parent_id) {
-      const Category = mongoose.model("Category");
-      const parent = await Category.findById(this.parent_id);
-      if (!parent) {
-        return next(new Error("Parent category not found"));
-      }
-      this.level = parent.level + 1;
-      this.path = parent.path
-        ? `${parent.path},${this._id}`
-        : `${parent._id},${this._id}`;
-    } else {
-      this.level = 0;
-      this.path = this._id.toString();
-    }
-  }
-
   // Auto-generate slug if not provided
   if (!this.slug && this.name) {
     this.slug = this.name
