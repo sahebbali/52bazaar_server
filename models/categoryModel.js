@@ -22,8 +22,10 @@ const categorySchema = new Schema(
       default: "🗂️",
     },
     parent: {
-      type: String,
-      default: "",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+      index: true,
     },
     is_active: {
       type: Boolean,

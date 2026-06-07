@@ -27,6 +27,7 @@ dns.setServers(["8.8.8.8", "1.1.1.1", "0.0.0.0"]);
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
+  "http://localhost:5174",
   "https://52bazaar.eurovisionbdg.com",
   "https://52-bazaar-frontend.vercel.app",
   "https://five2-bazaar-frontend.onrender.com",

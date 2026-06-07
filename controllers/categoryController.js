@@ -26,8 +26,7 @@ const getAllCategories = async (req, res) => {
     const filter = includeInactive === "true" ? {} : {};
 
     const categories = await Category.find(filter)
-      .populate("parent", "name")
-      .sort({ level: 1, name: 1 })
+      .sort({ created_at: 1 })
       .lean();
 
     const transformed = categories.map(transformCategory);
