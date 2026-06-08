@@ -97,6 +97,38 @@ const getCategoryById = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+const getCategoryOfChild = async (req, res) => {
+  try {
+    const { name } = req.params;
+
+    const category = await Category.findOne({ name }).select("_id");
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    const children = await Category.find({
+      parent: category._id,
+      is_active: true,
+    }).select("name -_id");
+
+    const childNames = children.map((item) => item.name);
+
+    res.status(200).json({
+      success: true,
+      category: name,
+      children: childNames,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // Create new category
 const createCategory = async (req, res) => {
@@ -573,4 +605,5 @@ export default {
   toggleStatus,
   getCategoryStats,
   getDashboardData,
+  getCategoryOfChild,
 };
