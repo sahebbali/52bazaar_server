@@ -21,7 +21,7 @@ const categorySchema = new Schema(
       type: String,
       default: "🗂️",
     },
-    parent: {
+    parent_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       default: null,

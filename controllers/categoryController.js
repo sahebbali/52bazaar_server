@@ -12,7 +12,7 @@ const transformCategory = (category) => {
     slug: category.slug,
     // description: category.description || "",
     subcategories: category.subcategories || [],
-    parent: category.parent || "",
+    parent_id: category.parent_id || "",
     status: category.is_active ? "active" : "inactive",
     icon: category.icon || "🗂️",
   };
@@ -84,9 +84,7 @@ const getCategoryById = async (req, res) => {
       return res.status(400).json({ error: "Invalid category ID" });
     }
 
-    const category = await Category.findById(id)
-      .populate("parent", "name")
-      .lean();
+    const category = await Category.findById(id).lean();
 
     if (!category) {
       return res.status(404).json({ error: "Category not found" });
@@ -111,7 +109,7 @@ const getCategoryOfChild = async (req, res) => {
     }
 
     const children = await Category.find({
-      parent: category._id,
+      parent_id: category._id,
       is_active: true,
     }).select("name -_id");
 
@@ -137,7 +135,7 @@ const createCategory = async (req, res) => {
       name,
       slug,
       description,
-      parent,
+      parent_id,
       status,
       icon,
       metaTitle,
@@ -180,7 +178,7 @@ const createCategory = async (req, res) => {
       name,
       slug: slug || undefined,
       description: description || "",
-      parent: parent || null,
+      parent_id: parent_id || null,
       is_active: status === "active",
       icon: iconValue,
       meta_title: metaTitle || "",
@@ -210,7 +208,7 @@ const updateCategory = async (req, res) => {
       name,
       slug,
       description,
-      parent,
+      parent_id,
       status,
       icon,
       metaTitle,
@@ -276,7 +274,10 @@ const updateCategory = async (req, res) => {
           description !== undefined
             ? description
             : existingCategory.description,
-        parent: parent !== undefined ? parent || null : existingCategory.parent,
+        parent_id:
+          parent_id !== undefined
+            ? parent_id || null
+            : existingCategory.parent_id,
         is_active:
           status !== undefined
             ? status === "active"
