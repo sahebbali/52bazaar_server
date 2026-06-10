@@ -1,23 +1,47 @@
 import Category from "../models/categoryModel.js";
 import Product from "../models/productModel.js";
+import Coupon from "../models/couponModel.js";
 
 const getAllCategories = async (req, res) => {
   try {
-    // console.log("Fetching all categories...");
-    const filter = { is_active: true };
-
-    const categories = await Category.find(filter)
+    const categories = await Category.find({ is_active: true })
       .select("name icon subcategories parent_id level")
-      .sort({ created_at: -1 })
+      .sort({ created_at: 1 }) // Ascending order
       .lean();
 
-    if (categories.length === 0) {
-      return res.status(404).json({ message: "No categories found" });
+    if (!categories.length) {
+      return res.status(404).json({
+        message: "No categories found",
+      });
     }
 
-    res.json(categories);
+    const categoryMap = {};
+
+    // Create category map
+    categories.forEach((category) => {
+      category.children = [];
+      categoryMap[category._id.toString()] = category;
+    });
+
+    const rootCategories = [];
+
+    categories.forEach((category) => {
+      if (category.parent_id) {
+        const parentId = category.parent_id.toString();
+
+        if (categoryMap[parentId]) {
+          categoryMap[parentId].children.push(category);
+        }
+      } else {
+        rootCategories.push(category);
+      }
+    });
+
+    res.status(200).json(rootCategories);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      error: error.message,
+    });
   }
 };
 
@@ -193,9 +217,137 @@ const getProductList = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+const getCategoryOfChild = async (req, res) => {
+  try {
+    const { name } = req.params;
 
+    // 1. Find category by name
+    const category = await Category.findOne({
+      name,
+      is_active: true,
+    }).lean();
+
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
+      });
+    }
+
+    // CASE 1: If it is a PARENT (has children)
+    const children = await Category.find({
+      parent_id: category._id,
+      is_active: true,
+    })
+      .select("name icon parent_id level subcategories")
+      .sort({ name: 1 })
+      .lean();
+
+    if (children.length > 0) {
+      return res.status(200).json({
+        success: true,
+        type: "parent",
+        category: {
+          _id: category._id,
+          name: category.name,
+          icon: category.icon,
+        },
+        children,
+      });
+    }
+
+    // CASE 2: If it is a CHILD → find parent
+    if (category.parent_id) {
+      const parent = await Category.findById(category.parent_id)
+        .select("name icon")
+        .lean();
+
+      const siblings = await Category.find({
+        parent_id: category.parent_id,
+        is_active: true,
+      })
+        .select("name icon parent_id level subcategories")
+        .sort({ name: 1 })
+        .lean();
+
+      return res.status(200).json({
+        success: true,
+        type: "child",
+        selected: {
+          _id: category._id,
+          name: category.name,
+          icon: category.icon,
+        },
+        parent,
+        siblings,
+      });
+    }
+
+    // CASE 3: standalone (no parent, no children)
+    return res.status(200).json({
+      success: true,
+      type: "standalone",
+      category,
+      children: [],
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+const getValidCoupons = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    let query = {
+      isActive: true,
+      startDate: { $lte: now }, // already started
+      endDate: { $gte: now }, // not expired
+    };
+
+    // Search by coupon code
+    if (req.query.search) {
+      query.code = { $regex: req.query.search, $options: "i" };
+    }
+
+    const coupons = await Coupon.find(query)
+      .select(
+        "-updatedAt -createdAt -usedCount -isActive -applicableProducts -applicableCategories -usageLimit -usedBy -createdBy",
+      )
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Coupon.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      message: "Valid coupons fetched successfully",
+      data: coupons,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 export default {
   getAllCategories,
   getAllProducts,
   getProductList,
+  getCategoryOfChild,
+  getValidCoupons,
 };

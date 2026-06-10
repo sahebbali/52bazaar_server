@@ -5,6 +5,8 @@ import publicController from "../controllers/publicController.js";
 
 // router.get("/products", publicController.getProducts);
 router.get("/get-all-categories", publicController.getAllCategories);
+router.get("/get-category-children/:name", publicController.getCategoryOfChild);
+router.get("/get-valid-coupons", publicController.getValidCoupons);
 
 router.get("/get-all-products", publicController.getAllProducts);
 
