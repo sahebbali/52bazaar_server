@@ -17,14 +17,7 @@ export const createUser = async (req, res) => {
     // console.log("Create User Request Body:", req.body);
 
     // 🔹 Required fields validation
-    if (
-      !name ||
-      !email ||
-      !phone ||
-      !addresses ||
-      !password ||
-      !confirmPassword
-    ) {
+    if (!name || !email || !phone || !password || !confirmPassword) {
       return res.status(400).json({
         success: false,
         message: "All fields are required",
