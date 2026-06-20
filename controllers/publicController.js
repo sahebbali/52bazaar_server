@@ -75,6 +75,9 @@ const getAllProducts = async (req, res) => {
       filter.category = {
         $regex: new RegExp(`^${category}$`, "i"),
       };
+      filter.subCategory = {
+        $regex: new RegExp(`^${category}$`, "i"),
+      };
     }
 
     // 🔹 Search filter (name-based search)
@@ -156,7 +159,7 @@ const getProductList = async (req, res) => {
     let query = {};
 
     if (category) {
-      query.category = category;
+      query.$or = [{ category: category }, { subCategory: category }];
     }
 
     if (search) {
